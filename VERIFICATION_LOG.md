@@ -453,3 +453,121 @@ Official X Layer API docs list POST /api/v5/xlayer/contract/verify-source-code f
 The same docs list auth failures for missing OK_ACCESS_KEY, OK_ACCESS_PASSPHRASE, OK_ACCESS_SIGN, and OK_ACCESS_TIMESTAMP.
 Local environment check found no OKLink verification credentials.
 ```
+
+## Phase 5 — Live Adaptation Proven On-Chain
+
+Date: 2026-05-26
+
+What Phase 5 had to prove:
+
+- A real X Layer mainnet swap can move the HELIX pool away from the Chainlink oracle reference.
+- The hook can update the baseline dynamic fee through `updateDynamicLPFee`.
+- A later toxic swap can trigger the per-swap reflex override and emit `ReflexFeeQuoted`.
+
+Pre-broadcast regression:
+
+```sh
+forge clean && forge build && forge test --offline -vvv
+```
+
+Output:
+
+```text
+Solc 0.8.26 finished in 21.10s
+Compiler run successful!
+Ran 2 test suites in 40.38ms (28.84ms CPU time): 15 tests passed, 0 failed, 0 skipped (15 total tests)
+```
+
+Warning-free dry-run:
+
+```sh
+set -a && source /Users/user/helix/.env && set +a && forge script script/RunPhase5LiveSwaps.s.sol:RunPhase5LiveSwaps --rpc-url https://rpc.xlayer.tech --offline -vvvv
+```
+
+Dry-run key output:
+
+```text
+Compiler run successful!
+Script ran successfully.
+BaselineFeeUpdated: oldFee 3000, newFee 4000, lvrSignal 65450000000000000, reason EVOLUTION_UP, swapsObserved 3
+ReflexFeeQuoted: oldFee 4000, newFee 4086, lvrSignal 4340000, reason REFLEX
+Estimated gas price: 0.040030421 gwei
+Estimated total gas used for script: 2706837
+Estimated amount required: 0.000108355824688377 ETH
+```
+
+Mainnet broadcast:
+
+```sh
+set -a && source /Users/user/helix/.env && set +a && forge script script/RunPhase5LiveSwaps.s.sol:RunPhase5LiveSwaps --rpc-url https://rpc.xlayer.tech --broadcast --offline -vvvv
+```
+
+Broadcast output:
+
+```text
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+Transactions saved to: /Users/user/helix/contracts/broadcast/RunPhase5LiveSwaps.s.sol/196/run-latest.json
+Estimated gas price: 0.040059403 gwei
+Estimated total gas used for script: 2706837
+Estimated amount required: 0.000108434274238311 ETH
+```
+
+Live tx hashes:
+
+```text
+Swap executor deploy: 0xe5d82776fa9aad25d511989f9862f0b210775db872526becb12267f7c4d94003
+USDT0 approve:        0xc3930a0390bd4c6e1dedc5064296e2e96c6ef405aa1963005971a2c34a5efdf5
+Push-away swap 1:     0x9e2ce8852242a85a45f41b4fdf612f81a9a505f22b53c96b8ac846a97fd6aa92
+Push-away swap 2:     0x636dae55fa97b7916fdf44f35563095a5979782f765a268b40384a3ddf825c33
+Evolution swap:       0x100890416ff3abc262c8fe99fcd47c5170af659b0c87e1e7d43a0afd0f0454e6
+Reflex toxic swap:    0x608903dd59b131110096a748c817b00a23861c1404ca3fa8ea0aa7a8bd9f8184
+```
+
+Receipt extraction command:
+
+```sh
+node -e "const f=require('./broadcast/RunPhase5LiveSwaps.s.sol/196/run-latest.json'); for (const r of f.receipts) console.log(JSON.stringify({transactionHash:r.transactionHash,status:r.status,gasUsed:r.gasUsed,contractAddress:r.contractAddress}, null, 2));"
+```
+
+Receipt status:
+
+```text
+All six Phase 5 receipts returned status 0x1.
+```
+
+Decoded HELIX events:
+
+```text
+Evolution tx: 0x100890416ff3abc262c8fe99fcd47c5170af659b0c87e1e7d43a0afd0f0454e6
+Event: BaselineFeeUpdated
+oldFee: 3000
+newFee: 4000
+lvrSignal: 65450000000000000
+reason: EVOLUTION_UP
+swapsObserved: 3
+oraclePriceE18: 90749785
+poolPriceE18: 84780174
+
+Reflex tx: 0x608903dd59b131110096a748c817b00a23861c1404ca3fa8ea0aa7a8bd9f8184
+Event: ReflexFeeQuoted
+oldFee: 4000
+newFee: 4086
+lvrSignal: 4340000
+reason: REFLEX
+oraclePriceE18: 90749785
+poolPriceE18: 82867456
+PoolManager Swap fee: 4086
+```
+
+Explorer links:
+
+```text
+https://www.oklink.com/x-layer/tx/0x100890416ff3abc262c8fe99fcd47c5170af659b0c87e1e7d43a0afd0f0454e6
+https://www.oklink.com/x-layer/tx/0x608903dd59b131110096a748c817b00a23861c1404ca3fa8ea0aa7a8bd9f8184
+```
+
+Plain-English result:
+
+- HELIX adapted on real X Layer mainnet transactions, not a fork or mock.
+- The third live swap caused the baseline fee to rise from `3000` to `4000`.
+- The toxic swap after that received a per-swap reflex fee of `4086`, and the PoolManager swap event shows that exact fee was used.

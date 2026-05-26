@@ -74,6 +74,37 @@
         "actualOkbWei": "4244530276512475",
         "actualUsdt0Raw": "364711"
       },
+      "phase5LiveAdaptation": {
+        "status": "complete",
+        "swapExecutor": "0xB705ca289Df4a39Ba55226C4405BA6c0143344CB",
+        "inputs": {
+          "pushAwaySwapCount": 3,
+          "okbPerPushAwaySwapWei": "50000000000000",
+          "toxicSwapUsdt0Raw": "5000"
+        },
+        "evolutionProof": {
+          "transaction": "0x100890416ff3abc262c8fe99fcd47c5170af659b0c87e1e7d43a0afd0f0454e6",
+          "event": "BaselineFeeUpdated",
+          "oldFee": 3000,
+          "newFee": 4000,
+          "lvrSignal": "65450000000000000",
+          "reason": "EVOLUTION_UP",
+          "swapsObserved": 3,
+          "oraclePriceE18": "90749785",
+          "poolPriceE18": "84780174"
+        },
+        "reflexProof": {
+          "transaction": "0x608903dd59b131110096a748c817b00a23861c1404ca3fa8ea0aa7a8bd9f8184",
+          "event": "ReflexFeeQuoted",
+          "oldFee": 4000,
+          "newFee": 4086,
+          "lvrSignal": "4340000",
+          "reason": "REFLEX",
+          "oraclePriceE18": "90749785",
+          "poolPriceE18": "82867456",
+          "poolManagerSwapFee": 4086
+        }
+      },
       "transactions": {
         "oracleDeploy": "0xd3b2d2c7f528b3ec2eef597cd28fb5a50bbb1e45852c95c1aa727977cca238e4",
         "hookDeploy": "0x220497b02ddf44e2b7dd23f92b7c4e4254cbc85c65f1c912041050aea12c7b7b",
@@ -81,19 +112,29 @@
         "poolInitialize": "0x47c3ae0f17960b1716b3d598894c53d06ffca6ca23cede7adba8499f14c7c9e1",
         "seederDeploy": "0xf6893a2de1f73aa31a1560fbb30e4522ab7dfd12d44db19fbd730e33a282d01c",
         "usdt0Approve": "0xb72c8be99c50656047f47d9ffde7425979041a1608cc72718ba11811d0be2c12",
-        "liquiditySeed": "0x3f032b7b633499a38e895ed4670e0f54aaab86e009b10962484945afbc513919"
+        "liquiditySeed": "0x3f032b7b633499a38e895ed4670e0f54aaab86e009b10962484945afbc513919",
+        "swapExecutorDeploy": "0xe5d82776fa9aad25d511989f9862f0b210775db872526becb12267f7c4d94003",
+        "phase5Usdt0Approve": "0xc3930a0390bd4c6e1dedc5064296e2e96c6ef405aa1963005971a2c34a5efdf5",
+        "phase5PushAwaySwap1": "0x9e2ce8852242a85a45f41b4fdf612f81a9a505f22b53c96b8ac846a97fd6aa92",
+        "phase5PushAwaySwap2": "0x636dae55fa97b7916fdf44f35563095a5979782f765a268b40384a3ddf825c33",
+        "phase5EvolutionSwap": "0x100890416ff3abc262c8fe99fcd47c5170af659b0c87e1e7d43a0afd0f0454e6",
+        "phase5ReflexSwap": "0x608903dd59b131110096a748c817b00a23861c1404ca3fa8ea0aa7a8bd9f8184"
       },
       "explorerLinks": {
         "oracle": "https://www.oklink.com/x-layer/address/0xf213fC8042136682ABd25AC2106481f4B6BdAFd2",
         "hook": "https://www.oklink.com/x-layer/address/0x9918CDcF5a70CfA7F52D06ed9DE8fE95197450C0",
         "seeder": "https://www.oklink.com/x-layer/address/0xB70d6705b1ED0d8b30e5e25039B8324d025Ab2CC",
+        "swapExecutor": "https://www.oklink.com/x-layer/address/0xB705ca289Df4a39Ba55226C4405BA6c0143344CB",
         "oracleDeployTx": "https://www.oklink.com/x-layer/tx/0xd3b2d2c7f528b3ec2eef597cd28fb5a50bbb1e45852c95c1aa727977cca238e4",
         "hookDeployTx": "https://www.oklink.com/x-layer/tx/0x220497b02ddf44e2b7dd23f92b7c4e4254cbc85c65f1c912041050aea12c7b7b",
         "hookInitializeTx": "https://www.oklink.com/x-layer/tx/0x3d69debd9384a7f94368f1274bf07eb395f8927d19a479a50d0382972d0ead8c",
         "poolInitializeTx": "https://www.oklink.com/x-layer/tx/0x47c3ae0f17960b1716b3d598894c53d06ffca6ca23cede7adba8499f14c7c9e1",
         "seederDeployTx": "https://www.oklink.com/x-layer/tx/0xf6893a2de1f73aa31a1560fbb30e4522ab7dfd12d44db19fbd730e33a282d01c",
         "usdt0ApproveTx": "https://www.oklink.com/x-layer/tx/0xb72c8be99c50656047f47d9ffde7425979041a1608cc72718ba11811d0be2c12",
-        "liquiditySeedTx": "https://www.oklink.com/x-layer/tx/0x3f032b7b633499a38e895ed4670e0f54aaab86e009b10962484945afbc513919"
+        "liquiditySeedTx": "https://www.oklink.com/x-layer/tx/0x3f032b7b633499a38e895ed4670e0f54aaab86e009b10962484945afbc513919",
+        "swapExecutorDeployTx": "https://www.oklink.com/x-layer/tx/0xe5d82776fa9aad25d511989f9862f0b210775db872526becb12267f7c4d94003",
+        "phase5EvolutionTx": "https://www.oklink.com/x-layer/tx/0x100890416ff3abc262c8fe99fcd47c5170af659b0c87e1e7d43a0afd0f0454e6",
+        "phase5ReflexTx": "https://www.oklink.com/x-layer/tx/0x608903dd59b131110096a748c817b00a23861c1404ca3fa8ea0aa7a8bd9f8184"
       },
       "phase4Status": {
         "contractsDeployed": true,

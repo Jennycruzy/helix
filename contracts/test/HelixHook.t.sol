@@ -4,18 +4,21 @@ pragma solidity ^0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {HelixHook} from "../src/HelixHook.sol";
+import {HelixSwapExecutor} from "../src/HelixSwapExecutor.sol";
 import {IHelixOracle} from "../src/interfaces/IHelixOracle.sol";
 import {MockHelixOracle} from "./mocks/MockHelixOracle.sol";
 import {Deployers} from "v4-core/test/utils/Deployers.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
+import {IERC20Minimal} from "v4-core/src/interfaces/external/IERC20Minimal.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {SwapParams} from "v4-core/src/types/PoolOperation.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 import {PoolSwapTest} from "v4-core/src/test/PoolSwapTest.sol";
+import {Currency} from "v4-core/src/types/Currency.sol";
 
 contract HelixHookTest is Test, Deployers {
     using PoolIdLibrary for PoolKey;
@@ -229,5 +232,29 @@ contract HelixHookTest is Test, Deployers {
     function test_nonManager_beforeSwap_reverts() public {
         vm.expectRevert(HelixHook.UnauthorizedCaller.selector);
         hook.beforeSwap(address(this), key, SwapParams({zeroForOne: true, amountSpecified: -1, sqrtPriceLimitX96: SQRT_PRICE_1_2}), ZERO_BYTES);
+    }
+
+    function test_liveSwapExecutor_settlesExactInputAndTriggersReflex() public {
+        HelixSwapExecutor executor = new HelixSwapExecutor(IPoolManager(manager), address(this));
+        IERC20Minimal(Currency.unwrap(currency0)).approve(address(executor), type(uint256).max);
+        IERC20Minimal(Currency.unwrap(currency1)).approve(address(executor), type(uint256).max);
+
+        oracle.setPrice(0.90e18);
+        SwapParams memory params = SwapParams({zeroForOne: true, amountSpecified: -100, sqrtPriceLimitX96: SQRT_PRICE_1_2});
+
+        vm.recordLogs();
+        executor.exactInput(key, params, 100, 1);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        bytes32 reflexSig = keccak256("ReflexFeeQuoted(bytes32,uint24,uint24,uint256,bytes32,uint256,uint256)");
+        bool sawReflex = false;
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].emitter == address(hook) && logs[i].topics[0] == reflexSig) {
+                sawReflex = true;
+            }
+        }
+
+        assertTrue(sawReflex);
+        assertGt(hook.currentToxicFlowScore(key), 0);
     }
 }
