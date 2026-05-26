@@ -337,3 +337,111 @@ Result:
 ```text
 Ran 2 test suites in 65.42ms (45.39ms CPU time): 14 tests passed, 0 failed, 0 skipped (14 total tests)
 ```
+
+## Phase 4 Update — Active OKB/USDT0 Mainnet Deployment
+
+Date: 2026-05-26
+
+Reason for update:
+
+- The deployer was funded with OKX-labeled `USDT0`, not the older `USDT` token address.
+- The active demo path is now `OKB/USDT0` using token `0x779Ded0c9e1022225f8E0630b35a9b54bE713736`.
+- A decimal-adjusted oracle was deployed so HELIX compares Uniswap v4 raw pool price units correctly for native OKB `18` decimals versus USDT0 `6` decimals.
+
+USDT0 balance check:
+
+```text
+Old USDT token 0x1E4a5963aBFD975d8c9021ce480b42188849D41d balance: 0
+USDT0 token    0x779ded0c9e1022225f8e0630b35a9b54be713736 balance: 5,000,000 raw units = 5.0 USDT0
+```
+
+Dry-run command:
+
+```sh
+set -a && source /Users/user/helix/.env && set +a && forge script script/DeployUSDT0HookAndSeed.s.sol:DeployUSDT0HookAndSeed --rpc-url https://rpc.xlayer.tech --offline -vvvv
+```
+
+Dry-run key output:
+
+```text
+Script ran successfully.
+USDT0 hook salt: 0x000000000000000000000000000000000000000000000000000000000000c727
+USDT0 hook: 0x9918CDcF5a70CfA7F52D06ed9DE8fE95197450C0
+Initialized OKB/USDT0 pool at tick -231457
+USDT0 oracle: 0xf213fC8042136682ABd25AC2106481f4B6BdAFd2
+USDT0 seeder: 0xB70d6705b1ED0d8b30e5e25039B8324d025Ab2CC
+Seeded liquidityDelta: 40000000000
+Actual seed settled: 4244530276512475 wei OKB and 364711 raw USDT0
+```
+
+Mainnet broadcast command:
+
+```sh
+set -a && source /Users/user/helix/.env && set +a && forge script script/DeployUSDT0HookAndSeed.s.sol:DeployUSDT0HookAndSeed --rpc-url https://rpc.xlayer.tech --broadcast --offline -vvvv
+```
+
+Mainnet broadcast output:
+
+```text
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+Transactions saved to: /Users/user/helix/contracts/broadcast/DeployUSDT0HookAndSeed.s.sol/196/run-latest.json
+Estimated gas price: 0.040000001 gwei
+Estimated total gas used for script: 6399267
+Estimated amount required: 0.000255970686399267 ETH
+```
+
+Active mainnet addresses:
+
+```text
+Adjusted oracle: 0xf213fC8042136682ABd25AC2106481f4B6BdAFd2
+HELIX hook:      0x9918CDcF5a70CfA7F52D06ed9DE8fE95197450C0
+Liquidity seeder:0xB70d6705b1ED0d8b30e5e25039B8324d025Ab2CC
+PoolId:          0x7e28af1b33b5a70e30ecd13e92f2d2800d59dbf1139c02e72a9a745cebdecc79
+USDT0:           0x779Ded0c9e1022225f8E0630b35a9b54bE713736
+```
+
+Mainnet tx hashes:
+
+```text
+Oracle deploy:   0xd3b2d2c7f528b3ec2eef597cd28fb5a50bbb1e45852c95c1aa727977cca238e4
+Hook deploy:     0x220497b02ddf44e2b7dd23f92b7c4e4254cbc85c65f1c912041050aea12c7b7b
+Hook initialize: 0x3d69debd9384a7f94368f1274bf07eb395f8927d19a479a50d0382972d0ead8c
+Pool initialize: 0x47c3ae0f17960b1716b3d598894c53d06ffca6ca23cede7adba8499f14c7c9e1
+Seeder deploy:   0xf6893a2de1f73aa31a1560fbb30e4522ab7dfd12d44db19fbd730e33a282d01c
+USDT0 approve:   0xb72c8be99c50656047f47d9ffde7425979041a1608cc72718ba11811d0be2c12
+Liquidity seed:  0x3f032b7b633499a38e895ed4670e0f54aaab86e009b10962484945afbc513919
+```
+
+Receipt status extraction:
+
+```sh
+node -e "const f=require('./broadcast/DeployUSDT0HookAndSeed.s.sol/196/run-latest.json'); for (const r of f.receipts) console.log(JSON.stringify({transactionHash:r.transactionHash,status:r.status,gasUsed:r.gasUsed,contractAddress:r.contractAddress}, null, 2));"
+```
+
+Key receipt output:
+
+```text
+All seven broadcast receipts returned status 0x1.
+```
+
+Plain-English result:
+
+- The active OKB/USDT0 HELIX pool is deployed on X Layer mainnet and seeded with real liquidity.
+- The hook address is permission-flag-correct and the pool was initialized with Uniswap v4's dynamic-fee flag.
+- Source verification on OKLink is still not completed because explorer verification credentials/flow are not available in this environment.
+
+Post-USDT0 deployment regression:
+
+```sh
+node -e "JSON.parse(require('fs').readFileSync('deployments/xlayer-mainnet.json','utf8')); console.log('deployment json ok')"
+forge build
+forge test --offline -vvv
+```
+
+Result:
+
+```text
+deployment json ok
+forge build: No files changed, compilation skipped
+Ran 2 test suites in 63.45ms (68.50ms CPU time): 14 tests passed, 0 failed, 0 skipped (14 total tests)
+```
