@@ -1,0 +1,85 @@
+{
+  "chain": {
+    "name": "X Layer mainnet",
+    "chainId": 196,
+    "rpcUrl": "https://rpc.xlayer.tech",
+    "explorerBaseUrl": "https://www.oklink.com/x-layer"
+  },
+  "deployer": "0x0Ac6bf160e208e67AF06d7F00c92AEfBbf089f95",
+  "pair": {
+    "name": "OKB/USDT",
+    "currency0": {
+      "symbol": "OKB",
+      "type": "native",
+      "address": "0x0000000000000000000000000000000000000000"
+    },
+    "currency1": {
+      "symbol": "USDT",
+      "type": "erc20",
+      "address": "0x1E4a5963aBFD975d8c9021ce480b42188849D41d",
+      "decimals": 6
+    }
+  },
+  "uniswapV4": {
+    "poolManager": "0x360e68faccca8ca495c1b759fd9eee466db9fb32",
+    "dynamicFeeFlag": "0x800000",
+    "tickSpacing": 60,
+    "poolId": "0xe6610ae955d149bf40e540c70393361e93a10b790447c7599b4df25750869585",
+    "sqrtPriceX96AtInitialize": "752804771397522960501775560849",
+    "initialTick": 45031
+  },
+  "oracle": {
+    "type": "ChainlinkRatioOracle",
+    "address": "0x7Cb64aB50C89B3803d4DcC4E7B7041FE9607Fd23",
+    "baseFeed": {
+      "pair": "OKB/USD",
+      "address": "0x4Ff345b18a2bF894F8627F41501FBf30d5C5e7BE",
+      "decimals": 8
+    },
+    "quoteFeed": {
+      "pair": "USDT/USD",
+      "address": "0xb928a0678352005a2e51F614efD0b54C9830dB80",
+      "decimals": 8
+    }
+  },
+  "hook": {
+    "name": "HelixHook",
+    "address": "0xF08e79cd52b866d8ED91C35c5efBdAd91FF590C0",
+    "create2Salt": "0x0000000000000000000000000000000000000000000000000000000000007afb",
+    "permissions": {
+      "afterInitialize": true,
+      "beforeSwap": true,
+      "afterSwap": true,
+      "returnDeltaFlags": false
+    },
+    "feeBounds": {
+      "minFee": 500,
+      "maxFee": 20000,
+      "initialFee": 3000
+    }
+  },
+  "transactions": {
+    "oracleDeploy": "0x7312a5754d9369685a46ccbc5b15b086ab1a867592263210e186272d91f28ae9",
+    "hookDeploy": "0x18a95b1d8874df57a4827499b577ca4271bd359882820ff89bc92d0cf66febaf",
+    "hookInitialize": "0xa2fb3fe5efc8cf4ba026226f654acf1d37d64d64e649126dce281d6a0b060061",
+    "poolInitialize": "0x828a5985fc219c5e658450ee57a6588bdcbe87efe00b62900bd3427ad26d8694"
+  },
+  "explorerLinks": {
+    "oracle": "https://www.oklink.com/x-layer/address/0x7Cb64aB50C89B3803d4DcC4E7B7041FE9607Fd23",
+    "hook": "https://www.oklink.com/x-layer/address/0xF08e79cd52b866d8ED91C35c5efBdAd91FF590C0",
+    "oracleDeployTx": "https://www.oklink.com/x-layer/tx/0x7312a5754d9369685a46ccbc5b15b086ab1a867592263210e186272d91f28ae9",
+    "hookDeployTx": "https://www.oklink.com/x-layer/tx/0x18a95b1d8874df57a4827499b577ca4271bd359882820ff89bc92d0cf66febaf",
+    "hookInitializeTx": "https://www.oklink.com/x-layer/tx/0xa2fb3fe5efc8cf4ba026226f654acf1d37d64d64e649126dce281d6a0b060061",
+    "poolInitializeTx": "https://www.oklink.com/x-layer/tx/0x828a5985fc219c5e658450ee57a6588bdcbe87efe00b62900bd3427ad26d8694"
+  },
+  "phase4Status": {
+    "contractsDeployed": true,
+    "poolInitialized": true,
+    "liquiditySeeded": false,
+    "sourceVerified": false,
+    "blockers": [
+      "The deployer has 0 USDT on the checked X Layer USDT contracts, so minimal OKB/USDT liquidity cannot be seeded yet.",
+      "X Layer explorer source verification requires the explorer verification flow/API credentials; verification has not been completed yet."
+    ]
+  }
+}

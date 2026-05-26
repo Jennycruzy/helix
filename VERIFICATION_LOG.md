@@ -211,3 +211,129 @@ Notes:
 - `ChainlinkRatioOracle` converts two Chainlink feeds into HELIX's `IHelixOracle` ratio format.
 - Adapter returns `priceE18` and the older of the two feed timestamps.
 - Bad or incomplete rounds revert in the adapter; HELIX treats oracle reverts as a safe skip.
+
+## Phase 4 — X Layer Mainnet Deployment
+
+Date: 2026-05-26
+
+Pre-broadcast checks:
+
+```sh
+git push -u origin main
+cast wallet address --private-key <redacted>
+curl -s -X POST https://rpc.xlayer.tech ... eth_getBalance
+curl -s -X POST https://rpc.xlayer.tech ... eth_gasPrice
+curl -s -X POST https://rpc.xlayer.tech ... eth_call decimals/symbol/balanceOf
+forge build
+set -a && source /Users/user/helix/.env && set +a && forge script script/DeployXLayerPhase4.s.sol:DeployXLayerPhase4 --rpc-url http://127.0.0.1:8545 --offline -vvvv
+```
+
+Key pre-broadcast output:
+
+```text
+To https://github.com/Jennycruzy/helix.git
+ * [new branch]      main -> main
+branch 'main' set up to track 'origin/main'.
+```
+
+```text
+Deployer address: 0x0Ac6bf160e208e67AF06d7F00c92AEfBbf089f95
+Native balance: 0x2aa1efb94e0000
+Gas price: 0x1312d01
+USDT balance on 0x1E4a5963aBFD975d8c9021ce480b42188849D41d: 0
+USDT balance on 0x779ded0c9e1022225f8e0630b35a9b54be713736: 0
+```
+
+Fork dry-run output:
+
+```text
+Script ran successfully.
+Hook salt: 0x0000000000000000000000000000000000000000000000000000000000007afb
+Oracle deployed 0x7Cb64aB50C89B3803d4DcC4E7B7041FE9607Fd23
+Hook deployed 0xF08e79cd52b866d8ED91C35c5efBdAd91FF590C0
+Pool initialized with sqrtPriceX96 763153869149809453229789624221
+Estimated total gas used for script: 4726935
+Estimated amount required: 0.000189077404726935 ETH
+```
+
+Mainnet broadcast command:
+
+```sh
+set -a && source /Users/user/helix/.env && set +a && forge script script/DeployXLayerPhase4.s.sol:DeployXLayerPhase4 --rpc-url https://rpc.xlayer.tech --broadcast --offline -vvvv
+```
+
+Mainnet broadcast output:
+
+```text
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+Transactions saved to: /Users/user/helix/contracts/broadcast/DeployXLayerPhase4.s.sol/196/run-latest.json
+Estimated amount required: 0.000189081124727028 ETH
+```
+
+Mainnet addresses:
+
+```text
+Oracle: 0x7Cb64aB50C89B3803d4DcC4E7B7041FE9607Fd23
+Hook:   0xF08e79cd52b866d8ED91C35c5efBdAd91FF590C0
+PoolId: 0xe6610ae955d149bf40e540c70393361e93a10b790447c7599b4df25750869585
+USDT:   0x1E4a5963aBFD975d8c9021ce480b42188849D41d
+```
+
+Mainnet tx hashes:
+
+```text
+Oracle deploy:   0x7312a5754d9369685a46ccbc5b15b086ab1a867592263210e186272d91f28ae9
+Hook deploy:     0x18a95b1d8874df57a4827499b577ca4271bd359882820ff89bc92d0cf66febaf
+Hook initialize: 0xa2fb3fe5efc8cf4ba026226f654acf1d37d64d64e649126dce281d6a0b060061
+Pool initialize: 0x828a5985fc219c5e658450ee57a6588bdcbe87efe00b62900bd3427ad26d8694
+```
+
+Receipt statuses:
+
+```text
+0x7312...8ae9 status 0x1 gasUsed 0x69fdf
+0x18a9...ebaf status 0x1 gasUsed 0x2a0d9
+0xa2fb...0061 status 0x1 gasUsed 0x27132a
+0x828a...694  status 0x1 gasUsed 0x1ba2a
+```
+
+Explorer links:
+
+```text
+https://www.oklink.com/x-layer/address/0x7Cb64aB50C89B3803d4DcC4E7B7041FE9607Fd23
+https://www.oklink.com/x-layer/address/0xF08e79cd52b866d8ED91C35c5efBdAd91FF590C0
+https://www.oklink.com/x-layer/tx/0x7312a5754d9369685a46ccbc5b15b086ab1a867592263210e186272d91f28ae9
+https://www.oklink.com/x-layer/tx/0x18a95b1d8874df57a4827499b577ca4271bd359882820ff89bc92d0cf66febaf
+https://www.oklink.com/x-layer/tx/0xa2fb3fe5efc8cf4ba026226f654acf1d37d64d64e649126dce281d6a0b060061
+https://www.oklink.com/x-layer/tx/0x828a5985fc219c5e658450ee57a6588bdcbe87efe00b62900bd3427ad26d8694
+```
+
+Phase 4 blockers:
+
+- Minimal OKB/USDT liquidity is not seeded yet because the deployer has `0` USDT on the checked X Layer USDT contracts.
+- Source verification is not completed yet because X Layer explorer verification requires the explorer verification flow/API credentials.
+
+Post-deploy code checks:
+
+```sh
+curl -s -X POST https://rpc.xlayer.tech ... eth_getCode 0xF08e79cd52b866d8ED91C35c5efBdAd91FF590C0
+curl -s -X POST https://rpc.xlayer.tech ... eth_getCode 0x7Cb64aB50C89B3803d4DcC4E7B7041FE9607Fd23
+```
+
+Result:
+
+```text
+Both deployed addresses returned non-empty bytecode.
+```
+
+Post-deploy regression:
+
+```sh
+forge test --offline -vvv
+```
+
+Result:
+
+```text
+Ran 2 test suites in 65.42ms (45.39ms CPU time): 14 tests passed, 0 failed, 0 skipped (14 total tests)
+```
