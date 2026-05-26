@@ -571,3 +571,124 @@ Plain-English result:
 - HELIX adapted on real X Layer mainnet transactions, not a fork or mock.
 - The third live swap caused the baseline fee to rise from `3000` to `4000`.
 - The toxic swap after that received a per-swap reflex fee of `4086`, and the PoolManager swap event shows that exact fee was used.
+
+## Phase 6 — Real Frontend Dashboard
+
+Date: 2026-05-26
+
+What Phase 6 had to prove:
+
+- The frontend connects to X Layer mainnet, not mock data.
+- It reads the deployed HELIX hook, oracle, and Phase 5 adaptation receipts.
+- It includes the Flap-facing pool dashboard and a guarded real-swap control.
+- It builds, lints, serves locally, and has screenshot proof.
+
+Dependency install:
+
+```sh
+npm install viem wagmi @tanstack/react-query recharts tailwindcss @tailwindcss/vite --loglevel=info
+```
+
+Output:
+
+```text
+added 79 packages, and audited 232 packages in 1m
+found 0 vulnerabilities
+```
+
+Production build:
+
+```sh
+npm run build
+```
+
+Output:
+
+```text
+> frontend@0.0.0 build
+> tsc -b && vite build
+
+vite v8.0.14 building client environment for production...
+✓ 1458 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.45 kB │ gzip:   0.29 kB
+dist/assets/index-BodIom4D.css   13.19 kB │ gzip:   3.89 kB
+dist/assets/ccip-Br81oUIO.js      2.83 kB │ gzip:   1.30 kB
+dist/assets/index-CqequCi3.js   858.87 kB │ gzip: 259.14 kB
+
+✓ built in 1.53s
+```
+
+Lint:
+
+```sh
+npm run lint
+```
+
+Output:
+
+```text
+> frontend@0.0.0 lint
+> eslint .
+```
+
+Local runtime proof:
+
+```sh
+npm run dev -- --host 127.0.0.1 --port 5173
+curl -I http://127.0.0.1:5174/
+```
+
+Output:
+
+```text
+VITE v8.0.14  ready in 846 ms
+Local:   http://127.0.0.1:5174/
+
+HTTP/1.1 200 OK
+Content-Type: text/html
+```
+
+Live X Layer state read using the same `viem` stack as the frontend:
+
+```sh
+node --input-type=module -e "<read deployed hook and oracle state>"
+```
+
+Output:
+
+```json
+{
+  "fee": 4000,
+  "toxicScore": "4340000",
+  "poolPriceE18": "85149181",
+  "oraclePriceE18": "91282185",
+  "oracleUpdatedAt": 1779752428
+}
+```
+
+Screenshot capture:
+
+```sh
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --headless=new --disable-gpu --no-sandbox --window-size=1440,1400 --virtual-time-budget=15000 --screenshot=docs/demo/phase6-frontend-loaded.png http://127.0.0.1:5174/
+```
+
+Output:
+
+```text
+501084 bytes written to file docs/demo/phase6-frontend-loaded.png
+```
+
+Screenshot files:
+
+```text
+docs/demo/phase6-frontend.png
+docs/demo/phase6-frontend-loaded.png
+```
+
+Plain-English result:
+
+- The Phase 6 frontend builds and lints cleanly.
+- The app serves locally and reads the deployed X Layer HELIX hook/oracle state with real values.
+- The screenshot in `docs/demo/phase6-frontend-loaded.png` shows the live dashboard loaded with current fee, toxic-flow score, oracle price, and pool price from mainnet.

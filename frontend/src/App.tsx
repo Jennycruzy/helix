@@ -1,122 +1,470 @@
 import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
+import { useQuery } from '@tanstack/react-query'
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import {
+  createPublicClient,
+  decodeEventLog,
+  http,
+  parseAbi,
+  type Address,
+  type Hash,
+} from 'viem'
+import { useAccount, useConnect, useDisconnect, useWriteContract } from 'wagmi'
 import './App.css'
 
+const chain = {
+  id: 196,
+  name: 'X Layer mainnet',
+  rpcUrl: 'https://rpc.xlayer.tech',
+  explorer: 'https://www.oklink.com/x-layer',
+}
+
+const addresses = {
+  hook: '0x9918CDcF5a70CfA7F52D06ed9DE8fE95197450C0',
+  oracle: '0xf213fC8042136682ABd25AC2106481f4B6BdAFd2',
+  usdt0: '0x779Ded0c9e1022225f8E0630b35a9b54bE713736',
+  poolManager: '0x360e68faccca8ca495c1B759Fd9EEe466db9FB32',
+  swapExecutor: '0xB705ca289Df4a39Ba55226C4405BA6c0143344CB',
+  deployer: '0x0Ac6bf160e208e67AF06d7F00c92AEfBbf089f95',
+  flapPortal: '0xb30D8c4216E1f21F27444D2FfAee3ad577808678',
+} as const
+
+const poolId = '0x7e28af1b33b5a70e30ecd13e92f2d2800d59dbf1139c02e72a9a745cebdecc79'
+const dynamicFeeFlag = 8_388_608
+const phase5Txs = [
+  '0x9e2ce8852242a85a45f41b4fdf612f81a9a505f22b53c96b8ac846a97fd6aa92',
+  '0x636dae55fa97b7916fdf44f35563095a5979782f765a268b40384a3ddf825c33',
+  '0x100890416ff3abc262c8fe99fcd47c5170af659b0c87e1e7d43a0afd0f0454e6',
+  '0x608903dd59b131110096a748c817b00a23861c1404ca3fa8ea0aa7a8bd9f8184',
+] as const
+
+const poolKey = {
+  currency0: '0x0000000000000000000000000000000000000000' as Address,
+  currency1: addresses.usdt0,
+  fee: dynamicFeeFlag,
+  tickSpacing: 60,
+  hooks: addresses.hook,
+}
+
+const publicClient = createPublicClient({
+  chain: {
+    id: chain.id,
+    name: chain.name,
+    nativeCurrency: { name: 'OKB', symbol: 'OKB', decimals: 18 },
+    rpcUrls: { default: { http: [chain.rpcUrl] } },
+  },
+  transport: http(chain.rpcUrl),
+})
+
+const hookAbi = parseAbi([
+  'function currentFee((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key) view returns (uint24)',
+  'function currentToxicFlowScore((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key) view returns (uint256)',
+  'function currentPoolPriceE18((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key) view returns (uint256)',
+  'event ReflexFeeQuoted(bytes32 indexed poolId,uint24 oldFee,uint24 newFee,uint256 lvrSignal,bytes32 reason,uint256 oraclePriceE18,uint256 poolPriceE18)',
+  'event BaselineFeeUpdated(bytes32 indexed poolId,uint24 oldFee,uint24 newFee,uint256 lvrSignal,bytes32 reason,uint32 swapsObserved,uint256 oraclePriceE18,uint256 poolPriceE18)',
+])
+
+const oracleAbi = parseAbi([
+  'function read((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key) view returns (uint256 priceE18,uint256 updatedAt)',
+])
+
+const erc20Abi = parseAbi(['function approve(address spender,uint256 amount) returns (bool)'])
+
+const swapExecutorAbi = parseAbi([
+  'function exactInput((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key,(bool zeroForOne,int256 amountSpecified,uint160 sqrtPriceLimitX96) swap,uint256 maxInput,uint256 minOutput) payable returns (int256)',
+])
+
+type AdaptationEvent = {
+  tx: Hash
+  blockNumber: bigint
+  type: 'EVOLUTION_UP' | 'EVOLUTION_DOWN' | 'REFLEX'
+  oldFee: number
+  newFee: number
+  lvrSignal: string
+  oraclePriceE18: string
+  poolPriceE18: string
+  swapsObserved?: number
+}
+
+type DashboardState = {
+  currentFee: number
+  toxicScore: string
+  poolPrice: string
+  oraclePrice: string
+  oracleUpdatedAt: number
+  events: AdaptationEvent[]
+  lastRefresh: string
+}
+
+async function fetchDashboard(): Promise<DashboardState> {
+  const [currentFee, toxicScore, poolPrice, oracleRead, receipts] = await Promise.all([
+    publicClient.readContract({
+      address: addresses.hook,
+      abi: hookAbi,
+      functionName: 'currentFee',
+      args: [poolKey],
+    }),
+    publicClient.readContract({
+      address: addresses.hook,
+      abi: hookAbi,
+      functionName: 'currentToxicFlowScore',
+      args: [poolKey],
+    }),
+    publicClient.readContract({
+      address: addresses.hook,
+      abi: hookAbi,
+      functionName: 'currentPoolPriceE18',
+      args: [poolKey],
+    }),
+    publicClient.readContract({
+      address: addresses.oracle,
+      abi: oracleAbi,
+      functionName: 'read',
+      args: [poolKey],
+    }),
+    Promise.all(phase5Txs.map((tx) => publicClient.getTransactionReceipt({ hash: tx }))),
+  ])
+
+  const events = receipts
+    .flatMap((receipt) =>
+      receipt.logs
+        .filter((log) => log.address.toLowerCase() === addresses.hook.toLowerCase())
+        .map((log) => {
+          const decoded = decodeEventLog({
+            abi: hookAbi,
+            data: log.data,
+            topics: log.topics,
+          })
+
+          if (decoded.eventName === 'BaselineFeeUpdated') {
+            return {
+              tx: receipt.transactionHash,
+              blockNumber: receipt.blockNumber,
+              type: bytes32ToText(decoded.args.reason) as 'EVOLUTION_UP' | 'EVOLUTION_DOWN',
+              oldFee: decoded.args.oldFee,
+              newFee: decoded.args.newFee,
+              lvrSignal: decoded.args.lvrSignal.toString(),
+              oraclePriceE18: decoded.args.oraclePriceE18.toString(),
+              poolPriceE18: decoded.args.poolPriceE18.toString(),
+              swapsObserved: decoded.args.swapsObserved,
+            }
+          }
+
+          return {
+            tx: receipt.transactionHash,
+            blockNumber: receipt.blockNumber,
+            type: 'REFLEX' as const,
+            oldFee: decoded.args.oldFee,
+            newFee: decoded.args.newFee,
+            lvrSignal: decoded.args.lvrSignal.toString(),
+            oraclePriceE18: decoded.args.oraclePriceE18.toString(),
+            poolPriceE18: decoded.args.poolPriceE18.toString(),
+          }
+        }),
+    )
+    .sort((a, b) => Number(a.blockNumber - b.blockNumber))
+
+  return {
+    currentFee,
+    toxicScore: toxicScore.toString(),
+    poolPrice: poolPrice.toString(),
+    oraclePrice: oracleRead[0].toString(),
+    oracleUpdatedAt: Number(oracleRead[1]),
+    events,
+    lastRefresh: new Date().toLocaleTimeString(),
+  }
+}
+
 function App() {
-  const [count, setCount] = useState(0)
+  const { address, isConnected } = useAccount()
+  const { connect, connectors, isPending: isConnecting } = useConnect()
+  const { disconnect } = useDisconnect()
+  const { writeContractAsync } = useWriteContract()
+  const [runStatus, setRunStatus] = useState('')
+  const {
+    data: state,
+    error,
+    isLoading,
+    isRefetching,
+    refetch,
+  } = useQuery({
+    queryKey: ['helix-dashboard', poolId],
+    queryFn: fetchDashboard,
+    refetchInterval: 20_000,
+  })
+
+  const isOwner = address?.toLowerCase() === addresses.deployer.toLowerCase()
+  const status = error
+    ? error instanceof Error
+      ? error.message
+      : 'Failed to load X Layer state'
+    : isLoading
+      ? 'Reading hook, oracle, and event receipts from X Layer mainnet...'
+      : isRefetching
+        ? 'Refreshing live X Layer state...'
+        : 'Live X Layer state loaded. No mocked data is used.'
+
+  async function runToxicSwap() {
+    if (!isOwner) {
+      setRunStatus('Connect the deployer wallet to run a real toxic swap. Read-only proof remains visible.')
+      return
+    }
+
+    setRunStatus('Approving 0.005 USDT0 for the deployed swap executor...')
+    const approveHash = await writeContractAsync({
+      address: addresses.usdt0,
+      abi: erc20Abi,
+      functionName: 'approve',
+      args: [addresses.swapExecutor, 5_000n],
+    })
+    await publicClient.waitForTransactionReceipt({ hash: approveHash })
+
+    setRunStatus('Sending the toxic USDT0 -> OKB swap through PoolManager...')
+    const swapHash = await writeContractAsync({
+      address: addresses.swapExecutor,
+      abi: swapExecutorAbi,
+      functionName: 'exactInput',
+      args: [
+        poolKey,
+        {
+          zeroForOne: false,
+          amountSpecified: -5_000n,
+          sqrtPriceLimitX96: 1_461_446_703_485_210_103_287_273_052_203_988_822_378_723_970_341n,
+        },
+        5_000n,
+        1n,
+      ],
+    })
+    await publicClient.waitForTransactionReceipt({ hash: swapHash })
+
+    setRunStatus(`Toxic swap mined: ${shortHash(swapHash)}. Refreshing event log...`)
+    await refetch()
+  }
+
+  const chartData = state?.events.map((event, index) => ({
+    name: `${index + 1}. ${event.type.replace('_', ' ')}`,
+    fee: event.newFee,
+    lvr: Number(event.lvrSignal),
+  })) ?? []
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <main className="min-h-screen overflow-hidden bg-[var(--paper)] text-[var(--ink)]">
+      <div className="grid-noise" />
+      <section className="hero-shell">
+        <nav className="topbar">
+          <div>
+            <span className="eyebrow">HELIX / X Layer / Uniswap v4</span>
+            <p className="muted">Self-defending liquidity for Flap-launched tokens.</p>
+          </div>
+          <div className="wallet-controls">
+            {isConnected ? (
+              <>
+                <span className="wallet-pill">{shortHash(address ?? '0x')}</span>
+                <button className="ghost-button" onClick={() => disconnect()} type="button">
+                  Disconnect
+                </button>
+              </>
+            ) : (
+              <button
+                className="primary-button"
+                disabled={isConnecting || connectors.length === 0}
+                onClick={() => connect({ connector: connectors[0] })}
+                type="button"
+              >
+                Connect OKX Wallet
+              </button>
+            )}
+          </div>
+        </nav>
+
+        <div className="hero-grid">
+          <div className="hero-copy">
+            <span className="signal-chip">Live mainnet proof</span>
+            <h1>The AMM that learns to defend its LPs.</h1>
+            <p>
+              HELIX measures pool-vs-oracle LVR pressure on every swap and rewrites its
+              Uniswap v4 dynamic fee curve inside hard-coded bounds.
+            </p>
+            <div className="hero-actions">
+              <a className="primary-button" href={explorerTx('0x608903dd59b131110096a748c817b00a23861c1404ca3fa8ea0aa7a8bd9f8184')} target="_blank">
+                View reflex tx
+              </a>
+              <button className="ghost-button" onClick={() => void refetch()} type="button">
+                Refresh chain state
+              </button>
+            </div>
+          </div>
+
+          <div className="orbital-card">
+            <div className="ring ring-one" />
+            <div className="ring ring-two" />
+            <div className="core">
+              <strong>{state ? feeToBps(state.currentFee) : '--'} bps</strong>
+              <span>current HELIX fee</span>
+            </div>
+            <div className="orbit-label label-one">Oracle</div>
+            <div className="orbit-label label-two">Pool</div>
+            <div className="orbit-label label-three">Fee curve</div>
+          </div>
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
+      </section>
+
+      <section className="dashboard">
+        <div className="status-strip">
+          <span>{status}</span>
+          <span>Last refresh: {state?.lastRefresh ?? 'pending'}</span>
+        </div>
+
+        <div className="metric-grid">
+          <Metric label="Current fee" value={state ? `${feeToBps(state.currentFee)} bps` : '--'} source="HelixHook.currentFee" />
+          <Metric label="Toxic-flow score" value={state ? compact(state.toxicScore) : '--'} source="HelixHook.currentToxicFlowScore" />
+          <Metric label="Oracle raw price" value={state ? compact(state.oraclePrice) : '--'} source="TokenDecimalsChainlinkRatioOracle.read" />
+          <Metric label="Pool raw price" value={state ? compact(state.poolPrice) : '--'} source="HelixHook.currentPoolPriceE18" />
+        </div>
+
+        <div className="panel-grid">
+          <section className="panel chart-panel">
+            <div className="panel-heading">
+              <div>
+                <span className="eyebrow">Pool autobiography</span>
+                <h2>Fee curve over live adaptation events</h2>
+              </div>
+              <a href={explorerAddress(addresses.hook)} target="_blank">Hook explorer</a>
+            </div>
+            <div className="chart-wrap">
+              <ResponsiveContainer width="100%" height={280}>
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="feeFill" x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="5%" stopColor="#f2b84b" stopOpacity={0.9} />
+                      <stop offset="95%" stopColor="#f2b84b" stopOpacity={0.05} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="rgba(50, 43, 30, 0.12)" vertical={false} />
+                  <XAxis dataKey="name" stroke="#645b4a" tick={{ fontSize: 11 }} />
+                  <YAxis stroke="#645b4a" tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Area dataKey="fee" name="Fee hundredths of bip" stroke="#38220d" fill="url(#feeFill)" strokeWidth={3} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-heading">
+              <div>
+                <span className="eyebrow">Judge trigger</span>
+                <h2>Run adversarial swap</h2>
+              </div>
+            </div>
+            <p className="panel-copy">
+              The button sends a real 0.005 USDT0 toxic swap through the deployed
+              `HelixSwapExecutor`. It is enabled only for the deployer wallet because
+              that executor is deliberately owner-gated.
+            </p>
+            <button className="danger-button" disabled={!isOwner} onClick={runToxicSwap} type="button">
+              Run real toxic swap
+            </button>
+            <p className="run-status">{runStatus || (isOwner ? 'Ready to spend real USDT0.' : 'Read-only mode: connect deployer to spend.')}</p>
+          </section>
+        </div>
+
+        <section className="panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">Flap token pool dashboard</span>
+              <h2>Flap-ready launch protection surface</h2>
+            </div>
+            <a href={explorerAddress(addresses.flapPortal)} target="_blank">Flap Portal</a>
+          </div>
+          <div className="flap-grid">
+            <Fact label="Integration type" value="Contract/event-based Flap discovery + manual oracle-covered HELIX pool" />
+            <Fact label="Selected pool" value="OKB / USDT0 exact-LVR demo pool" />
+            <Fact label="Token address" value={addresses.usdt0} />
+            <Fact label="Launch timestamp" value="Unavailable: USDT0 is not a Flap-launched token" />
+            <Fact label="PoolId" value={poolId} />
+            <Fact label="Hook address" value={addresses.hook} />
+          </div>
+          <p className="panel-copy">
+            For a newly launched Flap token, HELIX can discover token metadata from the
+            Flap Portal events. Exact LVR still requires a real external price reference;
+            the live proof therefore uses OKB/USDT0 where Chainlink feeds exist.
           </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
+        </section>
+
+        <section className="event-list">
+          {state?.events.map((event) => (
+            <article className="event-card" key={`${event.tx}-${event.type}`}>
+              <div>
+                <span className={`event-kind ${event.type === 'REFLEX' ? 'reflex' : 'evolution'}`}>{event.type}</span>
+                <h3>{event.oldFee} to {event.newFee}</h3>
+                <p>LVR signal {compact(event.lvrSignal)} / oracle {compact(event.oraclePriceE18)} / pool {compact(event.poolPriceE18)}</p>
+              </div>
+              <a href={explorerTx(event.tx)} target="_blank">{shortHash(event.tx)}</a>
+            </article>
+          ))}
+        </section>
       </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+    </main>
   )
+}
+
+function Metric({ label, value, source }: { label: string; value: string; source: string }) {
+  return (
+    <article className="metric-card">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{source}</small>
+    </article>
+  )
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="fact">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  )
+}
+
+function bytes32ToText(value: `0x${string}`) {
+  const hex = value.slice(2)
+  let output = ''
+  for (let i = 0; i < hex.length; i += 2) {
+    const code = Number.parseInt(hex.slice(i, i + 2), 16)
+    if (code !== 0) output += String.fromCharCode(code)
+  }
+  return output
+}
+
+function feeToBps(fee: number) {
+  return (fee / 100).toFixed(2)
+}
+
+function compact(value: string) {
+  if (value.length <= 10) return value
+  return `${value.slice(0, 6)}...${value.slice(-4)}`
+}
+
+function shortHash(value: string) {
+  return `${value.slice(0, 6)}...${value.slice(-4)}`
+}
+
+function explorerTx(tx: string) {
+  return `${chain.explorer}/tx/${tx}`
+}
+
+function explorerAddress(address_: string) {
+  return `${chain.explorer}/address/${address_}`
 }
 
 export default App
