@@ -428,7 +428,7 @@ Plain-English result:
 
 - The active OKB/USDT0 HELIX pool is deployed on X Layer mainnet and seeded with real liquidity.
 - The hook address is permission-flag-correct and the pool was initialized with Uniswap v4's dynamic-fee flag.
-- Source verification on OKLink is still not completed because explorer verification credentials/flow are not available in this environment.
+- Source verification on OKLink is still not completed because X Layer verification uses the OKLink verification API and this environment has no `OK_ACCESS_KEY` / signing credentials configured.
 
 Post-USDT0 deployment regression:
 
@@ -444,4 +444,12 @@ Result:
 deployment json ok
 forge build: No files changed, compilation skipped
 Ran 2 test suites in 63.45ms (68.50ms CPU time): 14 tests passed, 0 failed, 0 skipped (14 total tests)
+```
+
+Explorer verification blocker check:
+
+```text
+Official X Layer API docs list POST /api/v5/xlayer/contract/verify-source-code for source verification.
+The same docs list auth failures for missing OK_ACCESS_KEY, OK_ACCESS_PASSPHRASE, OK_ACCESS_SIGN, and OK_ACCESS_TIMESTAMP.
+Local environment check found no OKLink verification credentials.
 ```
