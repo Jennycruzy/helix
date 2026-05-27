@@ -692,3 +692,120 @@ Plain-English result:
 - The Phase 6 frontend builds and lints cleanly.
 - The app serves locally and reads the deployed X Layer HELIX hook/oracle state with real values.
 - The screenshot in `docs/demo/phase6-frontend-loaded.png` shows the live dashboard loaded with current fee, toxic-flow score, oracle price, and pool price from mainnet.
+
+## Phase 7 — Docs + Independent Re-Verification (fresh Linux environment)
+
+Date: 2026-05-27
+
+Why this section exists:
+
+- The Phases 0-6 logs above were produced on the original macOS build machine (`/Users/user/helix`).
+- This section re-proves the build, tests, and on-chain deployment independently on a fresh Linux
+  checkout (`/workspaces/helix`), and records completion of the Phase 7 documentation deliverables.
+
+On-chain re-verification (read-only X Layer mainnet RPC, no spend):
+
+```sh
+curl -s -X POST https://rpc.xlayer.tech ... eth_chainId
+curl -s -X POST https://rpc.xlayer.tech ... eth_getCode <hook> / <oracle>
+curl -s -X POST https://rpc.xlayer.tech ... eth_getTransactionReceipt <evolution tx> / <reflex tx>
+```
+
+Output:
+
+```text
+chainId            = 0xc4 (196, X Layer mainnet)
+hook   code length = 11477 bytes
+oracle code length = 2053 bytes
+evolution tx 0x100890...0454e6  status=0x1  block=61066053  logs=3
+reflex    tx 0x608903...f8184   status=0x1  block=61066053  logs=4
+```
+
+Decoded REFLEX event data words from the hook log (emitter `0x9918...50C0`):
+
+```text
+oldFee=4000  newFee=4086  lvrSignal=4340000  reason="REFLEX"  oraclePriceE18=90749785  poolPriceE18=82867456
+```
+
+These match `deployments/xlayer-mainnet.json` exactly. Deployment and live adaptation are genuine.
+
+Build + test re-run on Linux:
+
+```sh
+cd contracts
+forge install Uniswap/v4-core Uniswap/v4-periphery OpenZeppelin/openzeppelin-contracts foundry-rs/forge-std --no-git
+forge build
+forge test --offline -vvv
+```
+
+Output:
+
+```text
+Compiling 104 files with Solc 0.8.26
+Compiler run successful!
+(one benign forge-lint block-timestamp warning on the oracle staleness check)
+
+Ran 4 tests for test/ChainlinkRatioOracle.t.sol:ChainlinkRatioOracleTest  — 4 passed
+Ran 11 tests for test/HelixHook.t.sol:HelixHookTest                       — 11 passed
+Ran 2 test suites: 15 tests passed, 0 failed, 0 skipped (15 total tests)
+```
+
+Phase 7 documentation written:
+
+- `README.md` — judge-facing pitch, novelty, Flap positioning, loop + Flap demo diagrams,
+  proof-it's-real table, safety model, LVR formula + limitations, run instructions, criteria map.
+- `ARCHITECTURE.md` — LVR math, two-tier adaptation, safety envelope, oracle design, diagrams.
+- `DEMO.md` — literal 1-3 min run-of-show with explorer links and recorded fallback.
+- `docs/JUDGING.md` — criterion-by-criterion evidence.
+- `docs/X_POST.md` — X/Twitter launch draft tagging the partners.
+
+Plain-English result:
+
+- A stranger on a fresh Linux machine reproduced the clean build and the full 15-test green suite,
+  and independently confirmed via public RPC that the mainnet hook/oracle exist and that the two
+  adaptation transactions are real and decode to the documented values.
+
+## Source Verification on X Layer (OKLink) explorer
+
+Date: 2026-05-27
+
+Method: Foundry's Etherscan-compatible OKLink verifier.
+
+Key discovery: the deployed bytecode metadata reports solc `0.8.33`, not `0.8.26`. The hook source
+pragma is `^0.8.26`, so Foundry's multi-version build compiled `HelixHook` (and the other HELIX
+contracts) with the latest matching solc `0.8.33+commit.64118f21`, while `v4-core` files that pin
+`=0.8.26` stayed on 0.8.26. Verifying against 0.8.26 failed ("Unable to verify"); against 0.8.33 it
+passed. Compiler version was read straight from the on-chain metadata CBOR:
+
+```text
+metadata tail ...64736f6c6343 0008 21 0033  ->  solc 0.8.33
+```
+
+Command (per contract; constructor args ABI-encoded with `cast abi-encode`):
+
+```sh
+forge build --skip test --use 0.8.33 --force
+forge verify-contract <address> <path:Contract> \
+  --chain-id 196 \
+  --compiler-version v0.8.33+commit.64118f21 \
+  --num-of-optimizations 200 \
+  [--constructor-args <abi-encoded>] \
+  --verifier oklink \
+  --verifier-url https://www.oklink.com/api/v5/explorer/contract/verify-source-code-plugin/XLAYER \
+  --api-key $OK_ACCESS_KEY --watch
+```
+
+Result — all four contracts returned `Response: OK / Details: Pass - Verified`:
+
+```text
+HelixHook                          0x9918CDcF5a70CfA7F52D06ed9DE8fE95197450C0  Pass - Verified
+TokenDecimalsChainlinkRatioOracle  0xf213fC8042136682ABd25AC2106481f4B6BdAFd2  Pass - Verified
+HelixLiquiditySeeder               0xB70d6705b1ED0d8b30e5e25039B8324d025Ab2CC  Pass - Verified
+HelixSwapExecutor                  0xB705ca289Df4a39Ba55226C4405BA6c0143344CB  Pass - Verified
+```
+
+Plain-English result:
+
+- Every HELIX contract on X Layer mainnet now shows verified source on the OKLink explorer, so a
+  judge can read the exact code behind each address. The one remaining open item from earlier
+  (source verification) is now closed.

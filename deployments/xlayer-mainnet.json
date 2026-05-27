@@ -140,10 +140,22 @@
         "contractsDeployed": true,
         "poolInitialized": true,
         "liquiditySeeded": true,
-        "sourceVerified": false,
-        "blockers": [
-          "X Layer explorer source verification still requires the explorer verification flow/API credentials."
-        ]
+        "sourceVerified": true,
+        "blockers": []
+      },
+      "sourceVerification": {
+        "status": "complete",
+        "verifier": "oklink",
+        "verifierUrl": "https://www.oklink.com/api/v5/explorer/contract/verify-source-code-plugin/XLAYER",
+        "compilerVersion": "v0.8.33+commit.64118f21",
+        "optimizerRuns": 200,
+        "note": "HelixHook source pragma ^0.8.26 resolved to solc 0.8.33 at deploy time (Foundry multi-version build); v4-core stays on 0.8.26. All four contracts verified with Pass - Verified.",
+        "verifiedContracts": {
+          "HelixHook": "https://www.oklink.com/x-layer/address/0x9918CDcF5a70CfA7F52D06ed9DE8fE95197450C0",
+          "TokenDecimalsChainlinkRatioOracle": "https://www.oklink.com/x-layer/address/0xf213fC8042136682ABd25AC2106481f4B6BdAFd2",
+          "HelixLiquiditySeeder": "https://www.oklink.com/x-layer/address/0xB70d6705b1ED0d8b30e5e25039B8324d025Ab2CC",
+          "HelixSwapExecutor": "https://www.oklink.com/x-layer/address/0xB705ca289Df4a39Ba55226C4405BA6c0143344CB"
+        }
       }
     },
     "okb-usdt-legacy": {
