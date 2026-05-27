@@ -8,7 +8,13 @@ import {
   type Address,
   type Hash,
 } from 'viem'
-import { useAccount, useConnect, useDisconnect, useWriteContract } from 'wagmi'
+import {
+  useAccount,
+  useConnect,
+  useDisconnect,
+  useSwitchChain,
+  useWriteContract,
+} from 'wagmi'
 import './App.css'
 import { buildPoolMemory } from './lib/poolMemory'
 import { PoolMemoryPanel } from './components/pool-memory/PoolMemoryPanel'
@@ -284,9 +290,10 @@ async function detectFlapToken(address: string): Promise<DetectedToken | null> {
 }
 
 function App() {
-  const { address, isConnected } = useAccount()
+  const { address, isConnected, chainId } = useAccount()
   const { connect, connectors, isPending: isConnecting, error: connectError } = useConnect()
   const { disconnect } = useDisconnect()
+  const { switchChainAsync } = useSwitchChain()
   const { writeContractAsync } = useWriteContract()
   const [runStatus, setRunStatus] = useState('')
   const {
@@ -326,35 +333,49 @@ function App() {
       return
     }
 
-    setRunStatus('Approving 0.005 USDT0 for the deployed swap executor...')
-    const approveHash = await writeContractAsync({
-      address: addresses.usdt0,
-      abi: erc20Abi,
-      functionName: 'approve',
-      args: [addresses.swapExecutor, 5_000n],
-    })
-    await publicClient.waitForTransactionReceipt({ hash: approveHash })
+    try {
+      // The wallet may be on Ethereum (or any other chain). Force X Layer (196)
+      // before sending, otherwise the tx would route to the wrong network.
+      if (chainId !== chain.id) {
+        setRunStatus('Switching your wallet to X Layer mainnet (chainId 196)...')
+        await switchChainAsync({ chainId: chain.id })
+      }
 
-    setRunStatus('Sending the toxic USDT0 -> OKB swap through PoolManager...')
-    const swapHash = await writeContractAsync({
-      address: addresses.swapExecutor,
-      abi: swapExecutorAbi,
-      functionName: 'exactInput',
-      args: [
-        poolKey,
-        {
-          zeroForOne: false,
-          amountSpecified: -5_000n,
-          sqrtPriceLimitX96: 1_461_446_703_485_210_103_287_273_052_203_988_822_378_723_970_341n,
-        },
-        5_000n,
-        1n,
-      ],
-    })
-    await publicClient.waitForTransactionReceipt({ hash: swapHash })
+      setRunStatus('Approving 0.005 USDT0 for the deployed swap executor on X Layer...')
+      const approveHash = await writeContractAsync({
+        chainId: chain.id,
+        address: addresses.usdt0,
+        abi: erc20Abi,
+        functionName: 'approve',
+        args: [addresses.swapExecutor, 5_000n],
+      })
+      await publicClient.waitForTransactionReceipt({ hash: approveHash })
 
-    setRunStatus(`Toxic swap mined: ${shortHash(swapHash)}. Refreshing event log...`)
-    await refetch()
+      setRunStatus('Sending the toxic USDT0 -> OKB swap through PoolManager on X Layer...')
+      const swapHash = await writeContractAsync({
+        chainId: chain.id,
+        address: addresses.swapExecutor,
+        abi: swapExecutorAbi,
+        functionName: 'exactInput',
+        args: [
+          poolKey,
+          {
+            zeroForOne: false,
+            amountSpecified: -5_000n,
+            sqrtPriceLimitX96: 1_461_446_703_485_210_103_287_273_052_203_988_822_378_723_970_341n,
+          },
+          5_000n,
+          1n,
+        ],
+      })
+      await publicClient.waitForTransactionReceipt({ hash: swapHash })
+
+      setRunStatus(`Toxic swap mined on X Layer: ${shortHash(swapHash)}. Refreshing event log...`)
+      await refetch()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Swap failed.'
+      setRunStatus(`Swap stopped: ${message}`)
+    }
   }
 
   return (
