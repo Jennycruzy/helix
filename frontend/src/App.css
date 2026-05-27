@@ -616,6 +616,18 @@
   text-align: right;
 }
 
+.swap-tx-link {
+  display: inline-block;
+  margin-top: 8px;
+  font-weight: 900;
+  color: var(--ember);
+  text-decoration: none;
+}
+
+.swap-tx-link:hover {
+  text-decoration: underline;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

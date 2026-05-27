@@ -121,7 +121,10 @@ type DashboardState = {
   lastRefresh: string
 }
 
-async function fetchDashboard(): Promise<DashboardState> {
+async function fetchDashboard(extraTxs: readonly Hash[] = []): Promise<DashboardState> {
+  // Read the fixed proof transactions plus any swaps run live this session, so a
+  // freshly-mined swap shows up in the event log immediately.
+  const txs = Array.from(new Set<Hash>([...phase5Txs, ...extraTxs]))
   const [currentFee, toxicScore, poolPrice, oracleRead, rawState, rawConfig, receipts] =
     await Promise.all([
       publicClient.readContract({
@@ -159,7 +162,7 @@ async function fetchDashboard(): Promise<DashboardState> {
         abi: hookAbi,
         functionName: 'config',
       }),
-      Promise.all(phase5Txs.map((tx) => publicClient.getTransactionReceipt({ hash: tx }))),
+      Promise.all(txs.map((tx) => publicClient.getTransactionReceipt({ hash: tx }))),
     ])
 
   let staleOracleSkips = 0
@@ -296,6 +299,8 @@ function App() {
   const { switchChainAsync } = useSwitchChain()
   const { writeContractAsync } = useWriteContract()
   const [runStatus, setRunStatus] = useState('')
+  const [lastSwapTx, setLastSwapTx] = useState<Hash | null>(null)
+  const [sessionTxs, setSessionTxs] = useState<Hash[]>([])
   const {
     data: state,
     error,
@@ -303,8 +308,8 @@ function App() {
     isRefetching,
     refetch,
   } = useQuery({
-    queryKey: ['helix-dashboard', poolId],
-    queryFn: fetchDashboard,
+    queryKey: ['helix-dashboard', poolId, sessionTxs.join(',')],
+    queryFn: () => fetchDashboard(sessionTxs),
     refetchInterval: 20_000,
   })
 
@@ -370,7 +375,9 @@ function App() {
       })
       await publicClient.waitForTransactionReceipt({ hash: swapHash })
 
-      setRunStatus(`Toxic swap mined on X Layer: ${shortHash(swapHash)}. Refreshing event log...`)
+      setLastSwapTx(swapHash)
+      setSessionTxs((prev) => (prev.includes(swapHash) ? prev : [...prev, swapHash]))
+      setRunStatus('Toxic swap mined on X Layer. Event log updated below.')
       await refetch()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Swap failed.'
@@ -486,6 +493,11 @@ function App() {
               Run real toxic swap
             </button>
             <p className="run-status">{runStatus || (isOwner ? 'Ready to spend real USDT0.' : 'Read-only mode: connect deployer to spend.')}</p>
+            {lastSwapTx ? (
+              <a className="swap-tx-link" href={explorerTx(lastSwapTx)} target="_blank" rel="noreferrer">
+                View swap on X Layer explorer: {shortHash(lastSwapTx)} ↗
+              </a>
+            ) : null}
           </section>
         </div>
 
