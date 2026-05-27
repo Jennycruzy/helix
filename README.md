@@ -19,6 +19,67 @@ not arbitrary code, not an upgradeable proxy, and with no key that can drain the
 
 ---
 
+## What makes HELIX different
+
+Most "defensive" hooks ask *"which wallet is trading?"* and try to classify, score, or blacklist
+addresses. **HELIX does not classify traders. It lets the pool learn from what the market does to
+it.** It asks *"what is the market doing to this pool?"* — and records that at the **pool level**,
+never per wallet. There are no wallet personas, no user scores, no blacklists, and no admin that
+can pick winners.
+
+That gives HELIX a distinct identity built from four layers, all derived from real on-chain state:
+
+### 1. Pool Memory
+Each pool keeps a structured memory of what happened to it, computed from the hook's own events
+(`ReflexFeeQuoted`, `BaselineFeeUpdated`, `OracleSkipped`) and live `poolState`:
+
+- total swaps metered, protected (reflex) swaps, total adaptations, baseline evolutions
+- latest / highest / lowest fee reached
+- current toxic-flow score (the hook's `cumulativeLvrSignal`)
+- latest defense reason, fee direction (UP / DOWN / HOLD), and defense block
+- stale-oracle skips
+
+The dashboard's **Pool Memory** panel labels its source explicitly ("computed from HELIX hook
+events and live poolState") so nothing is presented as real that isn't on-chain.
+
+### 2. Defense Epochs
+Named lifecycle modes computed from pool memory (a presentation layer over on-chain facts — they
+never override the hook or its `MIN_FEE`/`MAX_FEE` bounds):
+
+- **Launch Shield** — the pool is young (few metered swaps), so HELIX stays more sensitive to
+  toxic flow and launch sniping.
+- **Adaptive Defense** — HELIX detected pool-vs-oracle pressure and is actively adapting the fee.
+- **Calm Market** — flow looks healthier, so HELIX relaxes defensive pressure.
+- **Oracle Safe Mode** — the latest oracle signal was stale/unsafe, so HELIX paused learning and
+  held the fee.
+
+### 3. Fee Curve Evolution
+HELIX does not use a fixed fee — the curve evolves with pool conditions. Two kinds of movement,
+both emitted on-chain and shown distinctly in the UI:
+
+- **Reflex fee** — a *temporary* per-swap response during a toxic-looking swap.
+- **Baseline evolution** — a *longer-term* baseline update after the pool observes enough flow.
+
+The dashboard shows the timeline plus the current fee band (Low Defense / Balanced / High Defense /
+Max Clamp). This is a **bounded controller / learning loop, not "AI."**
+
+### 4. Pool Learning
+The narrative tying it together — **observe → measure → defend → evolve → remember**:
+
+1. **Observe** — the hook sees every swap in `beforeSwap` / `afterSwap`.
+2. **Measure** — it measures pool-vs-oracle divergence and an LVR-like toxic-flow signal.
+3. **Defend** — toxic swaps get a temporary reflex fee.
+4. **Evolve** — after a cadence window, the baseline fee nudges up or down, within bounds.
+5. **Remember** — Pool Memory records the outcome and updates the defense epoch.
+
+> "HELIX learns by updating bounded parameters from real on-chain trading history."
+> **Self-evolving means bounded fee-curve adaptation, not arbitrary code mutation.** Oracle
+> failures cause a safe skip/hold, never an unsafe fee change.
+
+In one line: **other defensive hooks classify wallets; HELIX evolves pools.**
+
+---
+
 ## Flap positioning
 
 **HELIX is a self-defending liquidity layer for Flap-launched tokens on X Layer.**
@@ -35,6 +96,13 @@ Flap token. Exact oracle-anchored LVR requires a real external price reference, 
 mainnet proof runs on `OKB/USDT0`**, a pair with canonical Chainlink feeds on X Layer. A fresh
 Flap memecoin without a third-party feed would require a clearly-labeled fallback oracle — we did
 not fake one. See [docs/GROUND_TRUTH.md](docs/GROUND_TRUTH.md) for the full ground-truth findings.
+
+**Two HELIX modes, honestly labeled:** *For assets with reliable oracle coverage, HELIX uses
+oracle-anchored LVR-like signals. For very new Flap tokens without a reliable oracle, HELIX
+operates in launch-protection mode using toxic-flow proxy signals.* The dashboard's **Flap Launch
+Protection** panel lets you paste any Flap token address or URL; it reads ERC-20 metadata live from
+X Layer (never mocked) and shows which mode applies. **Flap launches the token; HELIX protects the
+liquidity that comes after.**
 
 ---
 
@@ -73,7 +141,8 @@ Two tiers:
   exceed.
 
 Every adaptation emits an on-chain event `(oldFee, newFee, lvrSignal, reason, prices)`. That event
-log is the pool's "autobiography" and is what the frontend visualizes.
+log is the pool's **memory** — it feeds the Pool Memory panel, the Defense Epoch badge, and the
+Fee Curve Evolution timeline in the frontend.
 
 ---
 

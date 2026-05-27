@@ -173,7 +173,7 @@ handful of swaps; a production pool would use a larger window.)
 
 ---
 
-## 6. Event log = the pool's autobiography
+## 6. Event log = the pool's memory
 
 | Event | Emitted when | Key fields |
 |---|---|---|
@@ -185,3 +185,35 @@ handful of swaps; a production pool would use a larger window.)
 
 The frontend reconstructs the fee-curve chart and event feed entirely from these on-chain events —
 no mocked data — and links each one to its X Layer explorer transaction.
+
+---
+
+## 7. Pool-memory identity layer (frontend-derived, no contract change)
+
+HELIX's "pool-memory hook" identity — **Pool Memory, Defense Epochs, Fee Curve Evolution, Pool
+Learning** — is built **entirely in the frontend** from the events above plus live view getters
+(`currentFee`, `currentToxicFlowScore`, `poolState`, `config`). **No contract change and no
+redeployment were required**, which is why the verified mainnet bytecode and all deployed addresses
+are untouched.
+
+```
+HelixHook events + view getters  ─▶  src/lib/poolMemory.ts   ─▶  PoolMemory  ─▶  panels
+   ReflexFeeQuoted                     src/lib/defenseEpochs.ts    (epoch)        PoolMemoryPanel
+   BaselineFeeUpdated                  src/lib/feeEvolution.ts     (fee band)     DefenseEpochBadge
+   OracleSkipped                                                                  FeeCurveEvolutionChart
+   poolState / config                                                            LearningLoopExplainer
+```
+
+| Layer | Source of truth | Notes |
+|---|---|---|
+| Pool Memory | reflex/evolution event counts + live `poolState` | `totalSwapsObserved = Σ BaselineFeeUpdated.swapsObserved + live swapsSinceEvolution` |
+| Defense Epoch | `classifyDefenseEpoch(memory)` | presentation only; precedence Oracle-safe → Launch → Adaptive → Calm; `LAUNCH_SWAP_THRESHOLD = 12` |
+| Fee Curve Evolution | reflex (temporary) vs baseline (persistent) events | fee band breakpoints in `feeEvolution.ts`; bounded controller, **not AI** |
+| Pool Learning | observe → measure → defend → evolve → remember | bounded parameter tuning, **not** code mutation |
+
+Because epochs and bands are computed off-chain, they can never override the hook or relax its
+`MIN_FEE`/`MAX_FEE` bounds — they only *describe* what the on-chain controller already did. The
+**Flap Launch Protection** panel additionally reads ERC-20 metadata (`name`/`symbol`/`decimals`)
+live for any pasted Flap token address/URL, and labels whether the token is in oracle-anchored LVR
+mode (reliable feed) or launch-protection proxy mode (no reliable feed yet) — never faking
+metadata or a feed.

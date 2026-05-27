@@ -1,15 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
-import {
   createPublicClient,
   decodeEventLog,
   http,
@@ -19,6 +10,15 @@ import {
 } from 'viem'
 import { useAccount, useConnect, useDisconnect, useWriteContract } from 'wagmi'
 import './App.css'
+import { buildPoolMemory } from './lib/poolMemory'
+import { PoolMemoryPanel } from './components/pool-memory/PoolMemoryPanel'
+import { FeeCurveEvolutionChart } from './components/pool-memory/FeeCurveEvolutionChart'
+import { LearningLoopExplainer } from './components/pool-memory/LearningLoopExplainer'
+import {
+  FlapLaunchProtectionPanel,
+  type DetectedToken,
+} from './components/pool-memory/FlapLaunchProtectionPanel'
+import type { FeeEvolutionPoint, PoolMemory, RawPoolState } from './types/helix'
 
 const chain = {
   id: 196,
@@ -68,8 +68,11 @@ const hookAbi = parseAbi([
   'function currentFee((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key) view returns (uint24)',
   'function currentToxicFlowScore((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key) view returns (uint256)',
   'function currentPoolPriceE18((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key) view returns (uint256)',
+  'function poolState(bytes32 poolId) view returns (uint24 baselineFee,uint24 lastReflexFee,uint32 swapsSinceEvolution,uint64 lastEvolutionBlock,uint256 cumulativeLvrSignal,uint256 lastOraclePriceE18,uint256 lastPoolPriceE18,bool initialized)',
+  'function config() view returns (uint24 initialFee,uint24 maxReflexFeeDelta,uint24 evolutionStepUp,uint24 evolutionStepDown,uint16 reflexThresholdBps,uint16 healthyThresholdBps,uint16 evolutionThresholdBps,uint16 reflexFeeMultiplierBps,uint32 evolutionCadence,uint64 maxOracleAge)',
   'event ReflexFeeQuoted(bytes32 indexed poolId,uint24 oldFee,uint24 newFee,uint256 lvrSignal,bytes32 reason,uint256 oraclePriceE18,uint256 poolPriceE18)',
   'event BaselineFeeUpdated(bytes32 indexed poolId,uint24 oldFee,uint24 newFee,uint256 lvrSignal,bytes32 reason,uint32 swapsObserved,uint256 oraclePriceE18,uint256 poolPriceE18)',
+  'event OracleSkipped(bytes32 indexed poolId,bytes32 reason)',
 ])
 
 const oracleAbi = parseAbi([
@@ -77,6 +80,12 @@ const oracleAbi = parseAbi([
 ])
 
 const erc20Abi = parseAbi(['function approve(address spender,uint256 amount) returns (bool)'])
+
+const erc20MetaAbi = parseAbi([
+  'function name() view returns (string)',
+  'function symbol() view returns (string)',
+  'function decimals() view returns (uint8)',
+])
 
 const swapExecutorAbi = parseAbi([
   'function exactInput((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key,(bool zeroForOne,int256 amountSpecified,uint160 sqrtPriceLimitX96) swap,uint256 maxInput,uint256 minOutput) payable returns (int256)',
@@ -101,76 +110,140 @@ type DashboardState = {
   oraclePrice: string
   oracleUpdatedAt: number
   events: AdaptationEvent[]
+  feeEvolution: FeeEvolutionPoint[]
+  memory: PoolMemory
   lastRefresh: string
 }
 
 async function fetchDashboard(): Promise<DashboardState> {
-  const [currentFee, toxicScore, poolPrice, oracleRead, receipts] = await Promise.all([
-    publicClient.readContract({
-      address: addresses.hook,
-      abi: hookAbi,
-      functionName: 'currentFee',
-      args: [poolKey],
-    }),
-    publicClient.readContract({
-      address: addresses.hook,
-      abi: hookAbi,
-      functionName: 'currentToxicFlowScore',
-      args: [poolKey],
-    }),
-    publicClient.readContract({
-      address: addresses.hook,
-      abi: hookAbi,
-      functionName: 'currentPoolPriceE18',
-      args: [poolKey],
-    }),
-    publicClient.readContract({
-      address: addresses.oracle,
-      abi: oracleAbi,
-      functionName: 'read',
-      args: [poolKey],
-    }),
-    Promise.all(phase5Txs.map((tx) => publicClient.getTransactionReceipt({ hash: tx }))),
-  ])
+  const [currentFee, toxicScore, poolPrice, oracleRead, rawState, rawConfig, receipts] =
+    await Promise.all([
+      publicClient.readContract({
+        address: addresses.hook,
+        abi: hookAbi,
+        functionName: 'currentFee',
+        args: [poolKey],
+      }),
+      publicClient.readContract({
+        address: addresses.hook,
+        abi: hookAbi,
+        functionName: 'currentToxicFlowScore',
+        args: [poolKey],
+      }),
+      publicClient.readContract({
+        address: addresses.hook,
+        abi: hookAbi,
+        functionName: 'currentPoolPriceE18',
+        args: [poolKey],
+      }),
+      publicClient.readContract({
+        address: addresses.oracle,
+        abi: oracleAbi,
+        functionName: 'read',
+        args: [poolKey],
+      }),
+      publicClient.readContract({
+        address: addresses.hook,
+        abi: hookAbi,
+        functionName: 'poolState',
+        args: [poolId],
+      }),
+      publicClient.readContract({
+        address: addresses.hook,
+        abi: hookAbi,
+        functionName: 'config',
+      }),
+      Promise.all(phase5Txs.map((tx) => publicClient.getTransactionReceipt({ hash: tx }))),
+    ])
 
-  const events = receipts
-    .flatMap((receipt) =>
-      receipt.logs
-        .filter((log) => log.address.toLowerCase() === addresses.hook.toLowerCase())
-        .map((log) => {
-          const decoded = decodeEventLog({
-            abi: hookAbi,
-            data: log.data,
-            topics: log.topics,
-          })
+  let staleOracleSkips = 0
+  const events: AdaptationEvent[] = []
+  for (const receipt of receipts) {
+    for (const log of receipt.logs) {
+      if (log.address.toLowerCase() !== addresses.hook.toLowerCase()) continue
+      const decoded = decodeEventLog({ abi: hookAbi, data: log.data, topics: log.topics })
 
-          if (decoded.eventName === 'BaselineFeeUpdated') {
-            return {
-              tx: receipt.transactionHash,
-              blockNumber: receipt.blockNumber,
-              type: bytes32ToText(decoded.args.reason) as 'EVOLUTION_UP' | 'EVOLUTION_DOWN',
-              oldFee: decoded.args.oldFee,
-              newFee: decoded.args.newFee,
-              lvrSignal: decoded.args.lvrSignal.toString(),
-              oraclePriceE18: decoded.args.oraclePriceE18.toString(),
-              poolPriceE18: decoded.args.poolPriceE18.toString(),
-              swapsObserved: decoded.args.swapsObserved,
-            }
-          }
+      if (decoded.eventName === 'BaselineFeeUpdated') {
+        events.push({
+          tx: receipt.transactionHash,
+          blockNumber: receipt.blockNumber,
+          type: bytes32ToText(decoded.args.reason) as 'EVOLUTION_UP' | 'EVOLUTION_DOWN',
+          oldFee: decoded.args.oldFee,
+          newFee: decoded.args.newFee,
+          lvrSignal: decoded.args.lvrSignal.toString(),
+          oraclePriceE18: decoded.args.oraclePriceE18.toString(),
+          poolPriceE18: decoded.args.poolPriceE18.toString(),
+          swapsObserved: decoded.args.swapsObserved,
+        })
+      } else if (decoded.eventName === 'ReflexFeeQuoted') {
+        events.push({
+          tx: receipt.transactionHash,
+          blockNumber: receipt.blockNumber,
+          type: 'REFLEX',
+          oldFee: decoded.args.oldFee,
+          newFee: decoded.args.newFee,
+          lvrSignal: decoded.args.lvrSignal.toString(),
+          oraclePriceE18: decoded.args.oraclePriceE18.toString(),
+          poolPriceE18: decoded.args.poolPriceE18.toString(),
+        })
+      } else if (decoded.eventName === 'OracleSkipped') {
+        staleOracleSkips += 1
+      }
+    }
+  }
+  events.sort((a, b) => Number(a.blockNumber - b.blockNumber))
 
-          return {
-            tx: receipt.transactionHash,
-            blockNumber: receipt.blockNumber,
-            type: 'REFLEX' as const,
-            oldFee: decoded.args.oldFee,
-            newFee: decoded.args.newFee,
-            lvrSignal: decoded.args.lvrSignal.toString(),
-            oraclePriceE18: decoded.args.oraclePriceE18.toString(),
-            poolPriceE18: decoded.args.poolPriceE18.toString(),
-          }
-        }),
-    )
-    .sort((a, b) => Number(a.blockNumber - b.blockNumber))
+  const feeEvolution: FeeEvolutionPoint[] = events.map((event) => ({
+    blockNumber: event.blockNumber,
+    txHash: event.tx,
+    oldFeeBps: event.oldFee,
+    newFeeBps: event.newFee,
+    feeDeltaBps: event.newFee - event.oldFee,
+    toxicFlowScore: event.lvrSignal,
+    reason: event.type,
+    kind: event.type === 'REFLEX' ? 'REFLEX' : 'BASELINE_EVOLUTION',
+  }))
+
+  const meteredSwapsFromEvolutions = events.reduce(
+    (sum, event) => sum + (event.swapsObserved ?? 0),
+    0,
+  )
+
+  const rawPoolState: RawPoolState = {
+    baselineFee: Number(rawState[0]),
+    lastReflexFee: Number(rawState[1]),
+    swapsSinceEvolution: Number(rawState[2]),
+    lastEvolutionBlock: rawState[3],
+    cumulativeLvrSignal: rawState[4].toString(),
+    lastOraclePriceE18: rawState[5].toString(),
+    lastPoolPriceE18: rawState[6].toString(),
+    initialized: rawState[7],
+  }
+
+  const memory = buildPoolMemory({
+    poolId,
+    hookAddress: addresses.hook,
+    token0: poolKey.currency0,
+    token1: poolKey.currency1,
+    rawState: rawPoolState,
+    config: {
+      initialFee: Number(rawConfig[0]),
+      maxReflexFeeDelta: Number(rawConfig[1]),
+      evolutionStepUp: Number(rawConfig[2]),
+      evolutionStepDown: Number(rawConfig[3]),
+      reflexThresholdBps: Number(rawConfig[4]),
+      healthyThresholdBps: Number(rawConfig[5]),
+      evolutionThresholdBps: Number(rawConfig[6]),
+      reflexFeeMultiplierBps: Number(rawConfig[7]),
+      evolutionCadence: Number(rawConfig[8]),
+      maxOracleAge: Number(rawConfig[9]),
+    },
+    events: feeEvolution,
+    liveCurrentFeeBps: currentFee,
+    liveToxicFlowScore: toxicScore.toString(),
+    meteredSwapsFromEvolutions,
+    staleOracleSkips,
+  })
 
   return {
     currentFee,
@@ -179,7 +252,34 @@ async function fetchDashboard(): Promise<DashboardState> {
     oraclePrice: oracleRead[0].toString(),
     oracleUpdatedAt: Number(oracleRead[1]),
     events,
+    feeEvolution,
+    memory,
     lastRefresh: new Date().toLocaleTimeString(),
+  }
+}
+
+async function detectFlapToken(address: string): Promise<DetectedToken | null> {
+  try {
+    const [name, symbol, decimals] = await Promise.all([
+      publicClient.readContract({
+        address: address as Address,
+        abi: erc20MetaAbi,
+        functionName: 'name',
+      }),
+      publicClient.readContract({
+        address: address as Address,
+        abi: erc20MetaAbi,
+        functionName: 'symbol',
+      }),
+      publicClient.readContract({
+        address: address as Address,
+        abi: erc20MetaAbi,
+        functionName: 'decimals',
+      }),
+    ])
+    return { address, name, symbol, decimals }
+  } catch {
+    return null
   }
 }
 
@@ -248,12 +348,6 @@ function App() {
     setRunStatus(`Toxic swap mined: ${shortHash(swapHash)}. Refreshing event log...`)
     await refetch()
   }
-
-  const chartData = state?.events.map((event, index) => ({
-    name: `${index + 1}. ${event.type.replace('_', ' ')}`,
-    fee: event.newFee,
-    lvr: Number(event.lvrSignal),
-  })) ?? []
 
   return (
     <main className="min-h-screen overflow-hidden bg-[var(--paper)] text-[var(--ink)]">
@@ -330,33 +424,13 @@ function App() {
           <Metric label="Pool raw price" value={state ? compact(state.poolPrice) : '--'} source="HelixHook.currentPoolPriceE18" />
         </div>
 
+        {state ? <PoolMemoryPanel memory={state.memory} /> : null}
+
         <div className="panel-grid">
-          <section className="panel chart-panel">
-            <div className="panel-heading">
-              <div>
-                <span className="eyebrow">Pool autobiography</span>
-                <h2>Fee curve over live adaptation events</h2>
-              </div>
-              <a href={explorerAddress(addresses.hook)} target="_blank">Hook explorer</a>
-            </div>
-            <div className="chart-wrap">
-              <ResponsiveContainer width="100%" height={280}>
-                <AreaChart data={chartData}>
-                  <defs>
-                    <linearGradient id="feeFill" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="5%" stopColor="#f2b84b" stopOpacity={0.9} />
-                      <stop offset="95%" stopColor="#f2b84b" stopOpacity={0.05} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke="rgba(50, 43, 30, 0.12)" vertical={false} />
-                  <XAxis dataKey="name" stroke="#645b4a" tick={{ fontSize: 11 }} />
-                  <YAxis stroke="#645b4a" tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Area dataKey="fee" name="Fee hundredths of bip" stroke="#38220d" fill="url(#feeFill)" strokeWidth={3} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
+          <FeeCurveEvolutionChart
+            points={state?.feeEvolution ?? []}
+            currentFeeBps={state?.currentFee ?? 0}
+          />
 
           <section className="panel">
             <div className="panel-heading">
@@ -399,6 +473,15 @@ function App() {
             the live proof therefore uses OKB/USDT0 where Chainlink feeds exist.
           </p>
         </section>
+
+        <LearningLoopExplainer />
+
+        <FlapLaunchProtectionPanel
+          oracleCoveredToken={addresses.usdt0}
+          flapPortal={addresses.flapPortal}
+          explorerAddress={explorerAddress}
+          detectToken={detectFlapToken}
+        />
 
         <section className="event-list">
           {state?.events.map((event) => (
