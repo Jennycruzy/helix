@@ -332,6 +332,11 @@ function App() {
         ? 'Refreshing live X Layer state...'
         : 'Live X Layer state loaded. No mocked data is used.'
 
+  // Hero CTA links to the MOST RECENT reflex event (or latest adaptation) from
+  // the live event log — never a hardcoded transaction.
+  const latestReflexTx = state?.events.filter((e) => e.type === 'REFLEX').at(-1)?.tx
+  const latestProofTx = latestReflexTx ?? state?.events.at(-1)?.tx
+
   async function runToxicSwap() {
     if (!isOwner) {
       setRunStatus('Connect the deployer wallet to run a real toxic swap. Read-only proof remains visible.')
@@ -433,9 +438,11 @@ function App() {
               Uniswap v4 dynamic fee curve inside hard-coded bounds.
             </p>
             <div className="hero-actions">
-              <a className="primary-button" href={explorerTx('0x608903dd59b131110096a748c817b00a23861c1404ca3fa8ea0aa7a8bd9f8184')} target="_blank">
-                View reflex tx
-              </a>
+              {latestProofTx ? (
+                <a className="primary-button" href={explorerTx(latestProofTx)} target="_blank" rel="noreferrer">
+                  {latestReflexTx ? 'View latest reflex tx' : 'View latest adaptation'}
+                </a>
+              ) : null}
               <button className="ghost-button" onClick={() => void refetch()} type="button">
                 Refresh chain state
               </button>
