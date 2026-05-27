@@ -285,7 +285,7 @@ async function detectFlapToken(address: string): Promise<DetectedToken | null> {
 
 function App() {
   const { address, isConnected } = useAccount()
-  const { connect, connectors, isPending: isConnecting } = useConnect()
+  const { connect, connectors, isPending: isConnecting, error: connectError } = useConnect()
   const { disconnect } = useDisconnect()
   const { writeContractAsync } = useWriteContract()
   const [runStatus, setRunStatus] = useState('')
@@ -302,6 +302,14 @@ function App() {
   })
 
   const isOwner = address?.toLowerCase() === addresses.deployer.toLowerCase()
+
+  function handleConnect() {
+    if (connectors.length === 0) return
+    // Prefer the OKX Wallet connector; fall back to the generic injected one.
+    const okx = connectors.find((c) => c.id === 'okxWallet')
+    connect({ connector: okx ?? connectors[0] })
+  }
+
   const status = error
     ? error instanceof Error
       ? error.message
@@ -367,14 +375,23 @@ function App() {
                 </button>
               </>
             ) : (
-              <button
-                className="primary-button"
-                disabled={isConnecting || connectors.length === 0}
-                onClick={() => connect({ connector: connectors[0] })}
-                type="button"
-              >
-                Connect OKX Wallet
-              </button>
+              <div className="connect-stack">
+                <button
+                  className="primary-button"
+                  disabled={isConnecting || connectors.length === 0}
+                  onClick={handleConnect}
+                  type="button"
+                >
+                  {isConnecting ? 'Connecting…' : 'Connect OKX Wallet'}
+                </button>
+                {connectError ? (
+                  <span className="connect-error">
+                    {connectError.message.includes('not found') || connectError.message.includes('Provider')
+                      ? 'No OKX Wallet detected. Install the OKX Wallet extension, then retry.'
+                      : connectError.message}
+                  </span>
+                ) : null}
+              </div>
             )}
           </div>
         </nav>
