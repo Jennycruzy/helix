@@ -281,7 +281,33 @@ npm install
 npm run dev      # open the printed localhost URL
 ```
 The dashboard reads the **real deployed hook/oracle and the real adaptation event receipts** from
-X Layer mainnet. The "Run real toxic swap" button is owner-gated to the deployer wallet.
+X Layer mainnet — no mocked data. Every number shown (current fee, toxic-flow score, oracle/pool
+prices, Pool Memory counters, the fee-evolution timeline) is read live from chain or decoded live
+from transaction receipts; the only hardcoded values are the real deployment constants (contract
+addresses, poolId) and the historical proof transactions that seed the event log.
+
+Frontend behaviour (all verified to build/lint; live-wallet steps need the OKX extension):
+
+- **Wallet connect** targets the **OKX Wallet** provider (`window.okxwallet`), with a generic
+  injected fallback for any other wallet; connection errors are surfaced in the UI instead of
+  failing silently.
+- **"Run real toxic swap"** is owner-gated to the deployer wallet (the on-chain `HelixSwapExecutor`
+  reverts `NotOwner()` for anyone else). Before sending, it **switches the wallet to X Layer
+  (chainId 196)** and pins `chainId` on the approve + swap, so the transaction can never route to
+  the wrong network. Failures (wrong chain, rejection, revert) show in the run status.
+- After a swap mines, the dashboard shows a **clickable X Layer explorer link** for the tx and feeds
+  it into the event log, so the new reflex / baseline-evolution events and Pool Memory counters
+  update immediately.
+- The hero **"View latest reflex tx"** button links to the most recent reflex event in the live
+  log — never a hardcoded transaction.
+- The **Flap Launch Protection** panel reads ERC-20 metadata live for any pasted Flap token
+  address/URL and labels oracle-backed vs launch-protection proxy mode (it never fakes metadata,
+  and it only detects — running a real swap works against the deployed OKB/USDT0 pool, the only
+  pool with a live HELIX hook).
+
+> **Deploy:** the frontend is a static Vite SPA that reads X Layer directly from the browser — no
+> backend or VPS required. On Vercel, set **Root Directory = `frontend`**, framework **Vite**,
+> build `npm run build`, output `dist`; no env vars are needed for the read-only dashboard.
 
 ### Live mainnet (spends real funds — opt-in)
 Scripts default to dry-run. Real broadcast requires the explicit `--broadcast` flag and prints a
