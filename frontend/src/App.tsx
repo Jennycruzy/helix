@@ -5,6 +5,7 @@ import {
   decodeEventLog,
   http,
   parseAbi,
+  parseAbiItem,
   type Address,
   type Hash,
 } from 'viem'
@@ -124,12 +125,37 @@ const skillPool = {
 
 const poolId = '0x7e28af1b33b5a70e30ecd13e92f2d2800d59dbf1139c02e72a9a745cebdecc79'
 const dynamicFeeFlag = 8_388_608
-const phase5Txs = [
+// X Layer's public RPC caps eth_getLogs at 100 blocks per request, so we
+// can't scan the whole history every refresh. Strategy: keep a curated
+// list of known historic proof txs (these always render), AND scan the
+// last RECENT_LOG_WINDOW blocks live so any brand-new evolution / reflex
+// that fires after the last known one lands on screen automatically.
+// 99 blocks ≈ 3.3 minutes of X Layer wallclock at ~2s blocks.
+const RECENT_LOG_WINDOW = 99n
+
+// Historic on-chain adaptation transactions emitted by the HELIX hook for
+// the OKB/USDT0 pool. New evolutions/reflexes that fire AFTER the last
+// entry below are picked up live via the rolling getLogs window.
+const KNOWN_PROOF_TXS = [
   '0x9e2ce8852242a85a45f41b4fdf612f81a9a505f22b53c96b8ac846a97fd6aa92',
   '0x636dae55fa97b7916fdf44f35563095a5979782f765a268b40384a3ddf825c33',
+  // EVOLUTION_UP 30 bps → 40 bps + REFLEX 40 → 40.86 bps at block 61_066_053
   '0x100890416ff3abc262c8fe99fcd47c5170af659b0c87e1e7d43a0afd0f0454e6',
   '0x608903dd59b131110096a748c817b00a23861c1404ca3fa8ea0aa7a8bd9f8184',
+  // EVOLUTION_UP 40 bps → 50 bps at block 61_231_791 (fired after the
+  // initial proof batch above; verified live with eth_getLogs).
+  '0xda8717694ee7511908fd778e4738ea54d6726b69c6d717cd1d91e1ab05c4efcd',
 ] as const
+
+const baselineFeeUpdatedEvent = parseAbiItem(
+  'event BaselineFeeUpdated(bytes32 indexed poolId, uint24 oldFee, uint24 newFee, uint256 lvrSignal, bytes32 reason, uint32 swapsObserved, uint256 oraclePriceE18, uint256 poolPriceE18)',
+)
+const reflexFeeQuotedEvent = parseAbiItem(
+  'event ReflexFeeQuoted(bytes32 indexed poolId, uint24 oldFee, uint24 newFee, uint256 lvrSignal, bytes32 reason, uint256 oraclePriceE18, uint256 poolPriceE18)',
+)
+const oracleSkippedEvent = parseAbiItem(
+  'event OracleSkipped(bytes32 indexed poolId, bytes32 reason)',
+)
 
 const poolKey = {
   currency0: '0x0000000000000000000000000000000000000000' as Address,
@@ -269,9 +295,22 @@ async function fetchFlapTokenStatus(): Promise<FlapTokenStatus> {
 }
 
 async function fetchDashboard(extraTxs: readonly Hash[] = []): Promise<DashboardState> {
-  // Read the fixed proof transactions plus any swaps run live this session, so a
-  // freshly-mined swap shows up in the event log immediately.
-  const txs = Array.from(new Set<Hash>([...phase5Txs, ...extraTxs]))
+  // Adaptation history is sourced from three live channels, deduped by
+  // (txHash, logIndex). All three are required because X Layer's public
+  // RPC caps eth_getLogs at 100 blocks per request — we can't scan the
+  // full history that way.
+  //   1. KNOWN_PROOF_TXS receipts: historic adaptations curated and
+  //      committed to the repo. Always render.
+  //   2. Rolling getLogs window of the last RECENT_LOG_WINDOW blocks:
+  //      brand-new events that fire after KNOWN_PROOF_TXS show up here.
+  //   3. extraTxs receipts (session swaps): events from a swap the user
+  //      just triggered land immediately even before getLogs indexes it.
+  const poolIdTopic = poolId as `0x${string}`
+  const currentBlock = await publicClient.getBlockNumber()
+  const recentFromBlock =
+    currentBlock > RECENT_LOG_WINDOW ? currentBlock - RECENT_LOG_WINDOW : 0n
+
+  const knownTxs = Array.from(new Set<Hash>([...KNOWN_PROOF_TXS, ...extraTxs]))
   const [
     currentFee,
     toxicScore,
@@ -279,9 +318,12 @@ async function fetchDashboard(extraTxs: readonly Hash[] = []): Promise<Dashboard
     oracleRead,
     rawState,
     rawConfig,
-    receipts,
+    knownTxReceipts,
+    sessionReceipts,
+    baselineLogs,
+    reflexLogs,
+    oracleSkippedLogs,
     flap,
-    currentBlock,
   ] = await Promise.all([
     publicClient.readContract({
       address: addresses.hook,
@@ -318,20 +360,107 @@ async function fetchDashboard(extraTxs: readonly Hash[] = []): Promise<Dashboard
       abi: hookAbi,
       functionName: 'config',
     }),
-    Promise.all(txs.map((tx) => publicClient.getTransactionReceipt({ hash: tx }))),
+    Promise.all(knownTxs.map((tx) => publicClient.getTransactionReceipt({ hash: tx }))),
+    Promise.all(extraTxs.map((tx) => publicClient.getTransactionReceipt({ hash: tx }))),
+    publicClient
+      .getLogs({
+        address: addresses.hook,
+        event: baselineFeeUpdatedEvent,
+        args: { poolId: poolIdTopic },
+        fromBlock: recentFromBlock,
+        toBlock: currentBlock,
+      })
+      .catch(() => []),
+    publicClient
+      .getLogs({
+        address: addresses.hook,
+        event: reflexFeeQuotedEvent,
+        args: { poolId: poolIdTopic },
+        fromBlock: recentFromBlock,
+        toBlock: currentBlock,
+      })
+      .catch(() => []),
+    publicClient
+      .getLogs({
+        address: addresses.hook,
+        event: oracleSkippedEvent,
+        args: { poolId: poolIdTopic },
+        fromBlock: recentFromBlock,
+        toBlock: currentBlock,
+      })
+      .catch(() => []),
     fetchFlapTokenStatus(),
-    publicClient.getBlockNumber(),
   ])
 
   let staleOracleSkips = 0
   const events: AdaptationEvent[] = []
   const oracleSkips: OracleSkipRecord[] = []
-  for (const receipt of receipts) {
+  // dedupe by (tx hash, logIndex) — every emitted log has a unique pair.
+  const seen = new Set<string>()
+  function eventKey(tx: string, logIndex: number | null) {
+    return `${tx}-${logIndex ?? 'r'}`
+  }
+
+  for (const log of baselineLogs) {
+    if (log.transactionHash == null || log.blockNumber == null) continue
+    const key = eventKey(log.transactionHash, log.logIndex)
+    if (seen.has(key)) continue
+    seen.add(key)
+    events.push({
+      tx: log.transactionHash,
+      blockNumber: log.blockNumber,
+      type: bytes32ToText(log.args.reason!) as 'EVOLUTION_UP' | 'EVOLUTION_DOWN',
+      oldFee: Number(log.args.oldFee!),
+      newFee: Number(log.args.newFee!),
+      lvrSignal: log.args.lvrSignal!.toString(),
+      oraclePriceE18: log.args.oraclePriceE18!.toString(),
+      poolPriceE18: log.args.poolPriceE18!.toString(),
+      swapsObserved: Number(log.args.swapsObserved!),
+    })
+  }
+  for (const log of reflexLogs) {
+    if (log.transactionHash == null || log.blockNumber == null) continue
+    const key = eventKey(log.transactionHash, log.logIndex)
+    if (seen.has(key)) continue
+    seen.add(key)
+    events.push({
+      tx: log.transactionHash,
+      blockNumber: log.blockNumber,
+      type: 'REFLEX',
+      oldFee: Number(log.args.oldFee!),
+      newFee: Number(log.args.newFee!),
+      lvrSignal: log.args.lvrSignal!.toString(),
+      oraclePriceE18: log.args.oraclePriceE18!.toString(),
+      poolPriceE18: log.args.poolPriceE18!.toString(),
+    })
+  }
+  for (const log of oracleSkippedLogs) {
+    if (log.transactionHash == null || log.blockNumber == null) continue
+    const key = eventKey(log.transactionHash, log.logIndex)
+    if (seen.has(key)) continue
+    seen.add(key)
+    staleOracleSkips += 1
+    oracleSkips.push({
+      tx: log.transactionHash,
+      blockNumber: log.blockNumber,
+      reason: bytes32ToText(log.args.reason!),
+    })
+  }
+
+  // Curated historic proof receipts + session swaps. The receipts loop
+  // runs over both so the autobiography always shows the known proof txs
+  // (which sit outside the 99-block recent-log window) and any swap the
+  // user just sent in this session (which may not yet be indexed in
+  // getLogs).
+  const allReceipts = [...knownTxReceipts, ...sessionReceipts]
+  for (const receipt of allReceipts) {
     for (const log of receipt.logs) {
       if (log.address.toLowerCase() !== addresses.hook.toLowerCase()) continue
+      const key = eventKey(receipt.transactionHash, log.logIndex)
+      if (seen.has(key)) continue
       const decoded = decodeEventLog({ abi: hookAbi, data: log.data, topics: log.topics })
-
       if (decoded.eventName === 'BaselineFeeUpdated') {
+        seen.add(key)
         events.push({
           tx: receipt.transactionHash,
           blockNumber: receipt.blockNumber,
@@ -344,6 +473,7 @@ async function fetchDashboard(extraTxs: readonly Hash[] = []): Promise<Dashboard
           swapsObserved: decoded.args.swapsObserved,
         })
       } else if (decoded.eventName === 'ReflexFeeQuoted') {
+        seen.add(key)
         events.push({
           tx: receipt.transactionHash,
           blockNumber: receipt.blockNumber,
@@ -355,6 +485,7 @@ async function fetchDashboard(extraTxs: readonly Hash[] = []): Promise<Dashboard
           poolPriceE18: decoded.args.poolPriceE18.toString(),
         })
       } else if (decoded.eventName === 'OracleSkipped') {
+        seen.add(key)
         staleOracleSkips += 1
         oracleSkips.push({
           tx: receipt.transactionHash,
@@ -364,6 +495,7 @@ async function fetchDashboard(extraTxs: readonly Hash[] = []): Promise<Dashboard
       }
     }
   }
+
   events.sort((a, b) => Number(a.blockNumber - b.blockNumber))
   oracleSkips.sort((a, b) => Number(a.blockNumber - b.blockNumber))
 
