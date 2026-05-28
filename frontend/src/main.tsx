@@ -14,12 +14,18 @@ declare global {
   }
 }
 
+// Optional RPC override for production / Vercel. If VITE_XLAYER_RPC_URL is
+// unset we fall back to X Layer's public RPC, so local dev keeps working
+// without any config and a fresh deploy needs zero env vars.
+export const XLAYER_RPC_URL =
+  import.meta.env.VITE_XLAYER_RPC_URL ?? 'https://rpc.xlayer.tech'
+
 const xLayer = defineChain({
   id: 196,
   name: 'X Layer',
   nativeCurrency: { name: 'OKB', symbol: 'OKB', decimals: 18 },
   rpcUrls: {
-    default: { http: ['https://rpc.xlayer.tech'] },
+    default: { http: [XLAYER_RPC_URL] },
   },
   blockExplorers: {
     default: { name: 'OKLink', url: 'https://www.oklink.com/x-layer' },
@@ -44,7 +50,7 @@ const config = createConfig({
   chains: [xLayer],
   connectors: [okxWallet, injected()],
   transports: {
-    [xLayer.id]: http('https://rpc.xlayer.tech'),
+    [xLayer.id]: http(XLAYER_RPC_URL),
   },
 })
 

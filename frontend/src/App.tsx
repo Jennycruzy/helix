@@ -16,6 +16,7 @@ import {
   useWriteContract,
 } from 'wagmi'
 import './App.css'
+import { XLAYER_RPC_URL } from './main'
 import { buildPoolMemory } from './lib/poolMemory'
 import { PoolMemoryPanel } from './components/pool-memory/PoolMemoryPanel'
 import { FeeCurveEvolutionChart } from './components/pool-memory/FeeCurveEvolutionChart'
@@ -59,7 +60,7 @@ const proofPassport: ProofPassport = {
 const chain = {
   id: 196,
   name: 'X Layer mainnet',
-  rpcUrl: 'https://rpc.xlayer.tech',
+  rpcUrl: XLAYER_RPC_URL,
   explorer: 'https://www.oklink.com/x-layer',
 }
 
