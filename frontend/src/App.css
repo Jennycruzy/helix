@@ -173,10 +173,12 @@
 }
 
 .core {
-  inset: 35%;
+  inset: 26%;
   display: grid;
   place-items: center;
   align-content: center;
+  gap: 8px;
+  padding: 18px;
   border-radius: 50%;
   background: var(--ink);
   color: #fff5df;
@@ -185,11 +187,23 @@
 }
 
 .core strong {
-  font-size: 34px;
+  font-size: clamp(30px, 4.5vw, 46px);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: #fff5df;
 }
 
 .core span {
-  color: #f2d79d;
+  color: #ffe1a4;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  line-height: 1.25;
+  max-width: 14ch;
 }
 
 .orbit-label {
@@ -751,6 +765,15 @@
 
   .orbital-card {
     min-height: 340px;
+  }
+
+  .core {
+    inset: 22%;
+    padding: 14px;
+  }
+
+  .core strong {
+    font-size: clamp(28px, 8vw, 40px);
   }
 
   .hero-copy p {
