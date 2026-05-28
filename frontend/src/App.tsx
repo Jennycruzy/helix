@@ -663,6 +663,30 @@ function App() {
           <Metric label="Pool raw price" value={state ? compact(state.poolPrice) : '--'} source="HelixHook.currentPoolPriceE18" />
         </div>
 
+        <section className="panel trigger-panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">Judge trigger</span>
+              <h2>Run adversarial swap</h2>
+            </div>
+          </div>
+          <p className="panel-copy">
+            Sends a real 0.005 USDT0 toxic swap through the deployed
+            <code> HelixSwapExecutor</code> on X Layer. The pool reacts on the next block —
+            the fee tile above moves, a new card appears in Pool Autobiography, and a new
+            point lands on the fee-evolution chart below.
+          </p>
+          <button className="danger-button" disabled={!isOwner} onClick={runToxicSwap} type="button">
+            Run real toxic swap
+          </button>
+          <p className="run-status">{runStatus || (isOwner ? 'Ready to spend real USDT0.' : 'Read-only mode: connect deployer wallet to spend.')}</p>
+          {lastSwapTx ? (
+            <a className="swap-tx-link" href={explorerTx(lastSwapTx)} target="_blank" rel="noreferrer">
+              View swap on X Layer explorer: {shortHash(lastSwapTx)} ↗
+            </a>
+          ) : null}
+        </section>
+
         {state ? (
           <ProtectionModesPanel
             oracle={{
@@ -716,35 +740,10 @@ function App() {
           />
         ) : null}
 
-        <div className="panel-grid">
-          <FeeCurveEvolutionChart
-            points={state?.feeEvolution ?? []}
-            currentFeeBps={state?.currentFee ?? 0}
-          />
-
-          <section className="panel">
-            <div className="panel-heading">
-              <div>
-                <span className="eyebrow">Judge trigger</span>
-                <h2>Run adversarial swap</h2>
-              </div>
-            </div>
-            <p className="panel-copy">
-              The button sends a real 0.005 USDT0 toxic swap through the deployed
-              `HelixSwapExecutor`. It is enabled only for the deployer wallet because
-              that executor is deliberately owner-gated.
-            </p>
-            <button className="danger-button" disabled={!isOwner} onClick={runToxicSwap} type="button">
-              Run real toxic swap
-            </button>
-            <p className="run-status">{runStatus || (isOwner ? 'Ready to spend real USDT0.' : 'Read-only mode: connect deployer to spend.')}</p>
-            {lastSwapTx ? (
-              <a className="swap-tx-link" href={explorerTx(lastSwapTx)} target="_blank" rel="noreferrer">
-                View swap on X Layer explorer: {shortHash(lastSwapTx)} ↗
-              </a>
-            ) : null}
-          </section>
-        </div>
+        <FeeCurveEvolutionChart
+          points={state?.feeEvolution ?? []}
+          currentFeeBps={state?.currentFee ?? 0}
+        />
 
         <section className="panel">
           <div className="panel-heading">
