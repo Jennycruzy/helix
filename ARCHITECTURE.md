@@ -5,6 +5,16 @@ Loss-Versus-Rebalancing (LVR) into an on-chain control signal and uses it to mov
 dynamic LP fee inside a hard-coded safety envelope. This document describes the math, the control
 loop, the safety model, and the oracle design.
 
+**Positioning.** HELIX is a self-defending liquidity layer for X Layer pools, not a Flap-only
+product. It currently ships two modes:
+
+| Mode | When it applies | Live status |
+|---|---|---|
+| **Oracle-backed LVR Mode** | Pair has a reliable external feed (e.g. Chainlink) | **Live on OKB/USDT0** with real REFLEX + EVOLUTION proof txs |
+| **Flap Launch Protection Proxy Mode** | New Flap-launched token without a reliable feed (e.g. SKILL / ClawHub) | **HelixFlapProxyHook live on X Layer mainnet** (`0x6c3eC6213b84c7E2267A24a81A2c23147e1950c0`) — new SKILL/OKB v4 pool initialised with the hook attached; liquidity seeding awaits SKILL graduation from the Flap bonding curve; no oracle is consulted in proxy mode |
+
+The remainder of this document describes Mode 1 in full detail. Mode 2 is summarized in §9.
+
 ---
 
 ## 1. Components
@@ -217,3 +227,114 @@ Because epochs and bands are computed off-chain, they can never override the hoo
 live for any pasted Flap token address/URL, and labels whether the token is in oracle-anchored LVR
 mode (reliable feed) or launch-protection proxy mode (no reliable feed yet) — never faking
 metadata or a feed.
+
+---
+
+## 8. Frontend mode switching (dashboard structure)
+
+The dashboard hero exposes three buttons so a judge can pick a protection mode without scrolling:
+
+| Button | Scrolls to | Behaviour |
+|---|---|---|
+| **View Live OKB/USDT0 Proof** | `#oracle-backed-mode` | Mode-1 summary card with current fee, toxic-flow score, hook + oracle addresses, latest REFLEX tx, latest EVOLUTION tx. |
+| **Check Flap Token** | `#flap-launch-mode` | Auto-focuses the Flap token input. Pasting an address or `flap.sh` URL triggers a live ERC-20 metadata read from X Layer. |
+| **Check Any X Layer Token** | `#xlayer-token-checker` | Auto-focuses a generic input. Reads metadata and recommends Oracle-backed LVR or Launch Protection Proxy mode. |
+
+A dedicated **Protection Modes** section then shows two side-by-side cards (oracle-backed +
+flap-proxy) with explicit status pills: `Live proof pool` for OKB/USDT0, and one of
+`Live Flap pool` / `Pool creation required` / `Waiting for token balance` / `Token detection failed`
+for the SKILL card based on live deployer balances. The status is never hardcoded — it is computed
+from `balanceOf(SKILL, deployer)` and `getBalance(deployer)` reads.
+
+---
+
+## 9. Flap Launch Protection Proxy Mode — HelixFlapProxyHook (LIVE)
+
+For tokens without a reliable external oracle, the oracle-anchored hook is unsuitable because its
+LVR signal depends on `oracle.read(key)`. The dedicated **HelixFlapProxyHook**
+(`contracts/src/HelixFlapProxyHook.sol`,
+deployed at `0x6c3eC6213b84c7E2267A24a81A2c23147e1950c0` on X Layer mainnet) uses pool-internal
+signals only — no oracle is consulted.
+
+### 9.1 Mechanics
+
+Per-pool state recorded in `afterInitialize`:
+
+```solidity
+struct PoolStateData {
+    uint64 initBlock;       // block.number at pool init
+    uint24 lastQuotedFee;   // fee returned by the most recent beforeSwap
+    uint32 totalSwaps;
+    uint32 reflexCount;     // count of swaps where reflex bump was applied
+    bool initialized;
+}
+```
+
+Two layered signals on every `beforeSwap`:
+
+1. **Launch-window decay (baseline fee).** The hook computes a baseline that linearly decays
+   from `config.launchFee` at `initBlock` to `config.baselineFee` after `config.decayBlocks`
+   blocks have elapsed:
+   ```
+   elapsed = block.number - initBlock
+   if elapsed >= decayBlocks:
+       baseline = baselineFee
+   else:
+       baseline = launchFee - (launchFee - baselineFee) * elapsed / decayBlocks
+   ```
+2. **Swap-size reflex.** The hook reads the current pool liquidity via
+   `IPoolManager.getLiquidity(poolId)` and compares the absolute swap size in bps:
+   ```
+   sizeBps = |amountSpecified| * 10_000 / liquidity
+   if sizeBps >= config.swapSizeReflexBps:
+       quotedFee = baseline + config.reflexFeeDelta
+       reason = SIZE_REFLEX
+   else:
+       quotedFee = baseline
+   ```
+
+The hook returns `quotedFee | LPFeeLibrary.OVERRIDE_FEE_FLAG` so PoolManager applies it for that
+swap only — the stored dynamic fee is not mutated per swap, keeping gas low.
+
+### 9.2 Production parameters on the SKILL/OKB proxy pool
+
+| Parameter | Value | Meaning |
+|---|---|---|
+| `launchFee` | `50_000` | 5.00% fee at the init block |
+| `baselineFee` | `5_000` | 0.50% long-term baseline |
+| `decayBlocks` | `20_000` | ~ 1 hour at ~2 s X Layer blocks |
+| `reflexFeeDelta` | `5_000` | +0.50% added to the decayed baseline on outsized swaps |
+| `swapSizeReflexBps` | `500` | trigger when a swap is ≥ 5% of current liquidity |
+
+### 9.3 Safety bounds
+
+- `MIN_FEE = 500` (0.05%), `MAX_FEE = 100_000` (10%); all quoted fees clamp into this band.
+- `_validateConfig` rejects `baselineFee > launchFee`, `decayBlocks = 0`, `swapSizeReflexBps = 0`
+  or `> 10_000`, and reflex deltas above the cap.
+- Same `nonReentrantHook` guard as the oracle-backed hook; `pause`/`unpause` controlled by the
+  admin role.
+
+### 9.4 Deployment evidence
+
+| Artefact | Value |
+|---|---|
+| Hook address | `0x6c3eC6213b84c7E2267A24a81A2c23147e1950c0` |
+| Hook permissions (bits 0–13) | `0x10C0` = afterInitialize \| beforeSwap \| afterSwap |
+| Hook deploy tx | `0xcbfd2a15da866958b9ac47b6c3a69b76dfedb73a0bf9b993be71db108d23caf9` |
+| Hook initialize tx | `0x42c1863ee70b96b341dbd397f4103c233da1c43dfb40d87b5d37c4cf59179c4e` |
+| Proxy pool id | `0x74acb2620f3c441082cae8b8af709b0b48d59ac15be9824c37c4b549dd82fba7` |
+| Pool initialize tx | `0x08474e3f4620902515811cd995775df6ed440f79cb9118298ba7b07c65a907cf` |
+
+A predecessor hookless SKILL/OKB pool with static 0.30% fee (poolId
+`0xc910...f086`) remains on chain — Uniswap v4 pools are immutable, so a fresh PoolKey was
+required to add a hook. The new proxy-hook pool is the canonical SKILL/OKB defense surface.
+
+### 9.5 Outstanding constraint
+
+Liquidity seeding into the proxy pool still reverts at the SKILL token contract with
+`"Transfers to/from pools are restricted in BondingCurve state"`. This is enforced by the SKILL
+token itself, not by HELIX — once SKILL graduates from the Flap bonding curve, the existing
+`SeedFlapHelixPool` script can be pointed at the new poolKey (currency0 = OKB native,
+currency1 = SKILL, fee = `DYNAMIC_FEE_FLAG`, tickSpacing = 60, hooks =
+`0x6c3eC6213b84c7E2267A24a81A2c23147e1950c0`) and the hook will start adapting fees on real
+swaps.

@@ -572,6 +572,67 @@
   font-size: 13px;
 }
 
+.shortcut-strip {
+  padding: 22px;
+}
+
+.shortcut-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.shortcut-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.42);
+  padding: 16px 18px;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+  font-family: inherit;
+  color: var(--ink);
+}
+
+.shortcut-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 40px rgba(54, 38, 20, 0.12);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.shortcut-card strong {
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+
+.shortcut-card small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 860px) {
+  .shortcut-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.protection-modes-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 980px) {
+  .protection-modes-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .flap-detect {
   display: flex;
   gap: 10px;
@@ -655,5 +716,335 @@
 
   .hero-copy p {
     font-size: 17px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Proof Passport
+ * ------------------------------------------------------------------------- */
+
+.passport-panel {
+  position: relative;
+}
+
+.passport-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.passport-badge {
+  border-radius: 999px;
+  padding: 6px 11px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid rgba(39, 27, 18, 0.18);
+  background: rgba(255, 249, 235, 0.7);
+  color: var(--ink);
+}
+
+.passport-badge-live {
+  background: linear-gradient(135deg, #3f7d56, #58a574);
+  color: #fffbe8;
+  border-color: rgba(63, 125, 86, 0.5);
+}
+
+.passport-badge-verified {
+  background: linear-gradient(135deg, #d97a2b, #f2b84b);
+  color: #24150c;
+  border-color: rgba(217, 122, 43, 0.5);
+}
+
+.passport-badge-mainnet {
+  background: var(--ink);
+  color: #fff5df;
+  border-color: var(--ink);
+}
+
+.passport-badge-readonly {
+  background: rgba(255, 249, 235, 0.85);
+  color: var(--muted);
+}
+
+.passport-badge-needsproof {
+  background: rgba(211, 78, 47, 0.12);
+  color: #7b2414;
+  border-color: rgba(211, 78, 47, 0.35);
+}
+
+.passport-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.passport-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 249, 235, 0.55);
+}
+
+.passport-row-missing {
+  background: rgba(211, 78, 47, 0.05);
+  border-style: dashed;
+}
+
+.passport-row-label {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.passport-row-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  overflow: hidden;
+}
+
+.passport-row-link {
+  color: var(--ember);
+  text-decoration: none;
+}
+
+.passport-row-link:hover {
+  text-decoration: underline;
+}
+
+.passport-copy-button {
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.passport-copy-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(39, 27, 18, 0.12);
+}
+
+.passport-footer {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+@media (max-width: 860px) {
+  .passport-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .passport-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .passport-row-value {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Pool Autobiography
+ * ------------------------------------------------------------------------- */
+
+.autobio-panel {
+  position: relative;
+}
+
+.autobio-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+  position: relative;
+}
+
+.autobio-timeline::before {
+  content: '';
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  bottom: 14px;
+  width: 2px;
+  background: linear-gradient(180deg, rgba(217, 122, 43, 0.6), rgba(39, 27, 18, 0.08));
+  border-radius: 2px;
+}
+
+.autobio-card {
+  position: relative;
+  margin-left: 36px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: rgba(255, 249, 235, 0.78);
+  box-shadow: 0 14px 40px rgba(54, 38, 20, 0.08);
+}
+
+.autobio-card::before {
+  content: '';
+  position: absolute;
+  top: 22px;
+  left: -28px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 0 0 4px rgba(255, 249, 235, 0.9);
+}
+
+.autobio-defense::before {
+  background: #d34e2f;
+}
+
+.autobio-evolution::before {
+  background: #d97a2b;
+}
+
+.autobio-warning::before {
+  background: #b88200;
+}
+
+.autobio-info::before {
+  background: #3f7d56;
+}
+
+.autobio-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.autobio-pill {
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.autobio-pill-info {
+  background: rgba(63, 125, 86, 0.18);
+  color: #1e4a30;
+}
+
+.autobio-pill-defense {
+  background: rgba(211, 78, 47, 0.18);
+  color: #7b2414;
+}
+
+.autobio-pill-evolution {
+  background: rgba(217, 122, 43, 0.2);
+  color: #6a3a0d;
+}
+
+.autobio-pill-warning {
+  background: rgba(184, 130, 0, 0.2);
+  color: #5a3f00;
+}
+
+.autobio-epoch-chip {
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(39, 27, 18, 0.08);
+  color: var(--ink);
+}
+
+.autobio-reason {
+  font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--muted);
+  margin-left: auto;
+}
+
+.autobio-title {
+  margin: 4px 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+
+.autobio-summary {
+  margin: 0 0 12px;
+  color: var(--ink);
+  line-height: 1.5;
+  font-size: 15px;
+}
+
+.autobio-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.autobio-meta > div {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.autobio-meta dt {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.autobio-meta dd {
+  margin: 0;
+  font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.autobio-meta dd a {
+  color: var(--ember);
+  text-decoration: none;
+}
+
+.autobio-meta dd a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 860px) {
+  .autobio-card {
+    margin-left: 26px;
+  }
+
+  .autobio-card::before {
+    left: -22px;
   }
 }

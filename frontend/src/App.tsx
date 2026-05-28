@@ -24,7 +24,37 @@ import {
   FlapLaunchProtectionPanel,
   type DetectedToken,
 } from './components/pool-memory/FlapLaunchProtectionPanel'
+import { ProtectionModesPanel } from './components/pool-memory/ProtectionModesPanel'
+import { PoolAutobiographyPanel } from './components/pool-memory/PoolAutobiographyPanel'
+import { ProofPassportPanel } from './components/pool-memory/ProofPassportPanel'
+import { buildPoolAutobiography } from './lib/poolAutobiography'
+import type { ProofPassport } from './lib/proofPassport'
 import type { FeeEvolutionPoint, PoolMemory, RawPoolState } from './types/helix'
+
+// Proof Passport — populated directly from deployments/xlayer-mainnet.json so
+// every field a judge sees is a real on-chain artifact. The frontend never
+// invents a tx hash or contract; missing pieces would render as "Not provided yet".
+const proofPassport: ProofPassport = {
+  network: 'X Layer Mainnet',
+  chainId: 196,
+  hookAddress: '0x9918CDcF5a70CfA7F52D06ed9DE8fE95197450C0',
+  poolManagerAddress: '0x360E68faCcca8ca495c1B759Fd9EEe466db9FB32',
+  poolId: '0x7e28af1b33b5a70e30ecd13e92f2d2800d59dbf1139c02e72a9a745cebdecc79',
+  token0: '0x0000000000000000000000000000000000000000',
+  token0Symbol: 'OKB',
+  token1: '0x779Ded0c9e1022225f8E0630b35a9b54bE713736',
+  token1Symbol: 'USDT0',
+  oracleAddress: '0xf213fC8042136682ABd25AC2106481f4B6BdAFd2',
+  deploymentTx: '0x220497b02ddf44e2b7dd23f92b7c4e4254cbc85c65f1c912041050aea12c7b7b',
+  poolCreationTx: '0x47c3ae0f17960b1716b3d598894c53d06ffca6ca23cede7adba8499f14c7c9e1',
+  reflexProofTx: '0x608903dd59b131110096a748c817b00a23861c1404ca3fa8ea0aa7a8bd9f8184',
+  evolutionProofTx: '0x100890416ff3abc262c8fe99fcd47c5170af659b0c87e1e7d43a0afd0f0454e6',
+  verifiedContractUrl:
+    'https://www.oklink.com/x-layer/address/0x9918CDcF5a70CfA7F52D06ed9DE8fE95197450C0',
+  explorerBaseUrl: 'https://www.oklink.com/x-layer',
+  lastUpdated: '2026-05-28',
+  badges: ['Mainnet', 'Live', 'Verified', 'Read-only'],
+}
 
 const chain = {
   id: 196,
@@ -41,6 +71,42 @@ const addresses = {
   swapExecutor: '0xB705ca289Df4a39Ba55226C4405BA6c0143344CB',
   deployer: '0x0Ac6bf160e208e67AF06d7F00c92AEfBbf089f95',
   flapPortal: '0xb30D8c4216E1f21F27444D2FfAee3ad577808678',
+  // Real Flap-launched token on X Layer (ClawHub / SKILL).
+  skill: '0xed06d48a87f8b8b3e78afd7dd59717a3f7317777',
+} as const
+
+const flapSkillUrl = `https://flap.sh/xlayer/${addresses.skill}`
+
+// Real SKILL/OKB v4 pool with the HelixFlapProxyHook attached on X Layer
+// mainnet (deployed 2026-05-28). Dynamic-fee: launch shield 5.00% decays to
+// 0.50% over 20000 blocks; swaps > 5% of liquidity get a one-swap +0.50%
+// reflex bump. Seeding still blocked by SKILL bonding-curve restriction.
+// A predecessor hookless pool (poolId 0xc910...f086, static 0.30%) was
+// initialized earlier the same day; both pools coexist because v4 pools are
+// immutable.
+const skillPool = {
+  poolId: '0x74acb2620f3c441082cae8b8af709b0b48d59ac15be9824c37c4b549dd82fba7',
+  hookAddress: '0x6c3eC6213b84c7E2267A24a81A2c23147e1950c0',
+  hookDeployTx: '0xcbfd2a15da866958b9ac47b6c3a69b76dfedb73a0bf9b993be71db108d23caf9' as Hash,
+  hookInitializeTx: '0x42c1863ee70b96b341dbd397f4103c233da1c43dfb40d87b5d37c4cf59179c4e' as Hash,
+  initializeTx: '0x08474e3f4620902515811cd995775df6ed440f79cb9118298ba7b07c65a907cf' as Hash,
+  dynamicFeeFlag: 8_388_608,
+  tickSpacing: 60,
+  sqrtPriceX96AtInit: '292223702661591749708025597788160',
+  initialTick: 164267,
+  config: {
+    launchFee: 50_000,
+    baselineFee: 5_000,
+    decayBlocks: 20_000,
+    reflexFeeDelta: 5_000,
+    swapSizeReflexBps: 500,
+  },
+  predecessor: {
+    poolId: '0xc910656a0f753c9a5629cf9722038a0ded4bdc7ea6a4b95050d5375bde48f086',
+    initializeTx: '0x9f293eb754b5943311aebc7d1db99011422546558175a68b7ffd07f6a4c7255a' as Hash,
+    fee: 3000,
+    note: 'Earlier hookless static-fee SKILL/OKB pool; superseded by the proxy-hook pool above.',
+  },
 } as const
 
 const poolId = '0x7e28af1b33b5a70e30ecd13e92f2d2800d59dbf1139c02e72a9a745cebdecc79'
@@ -93,6 +159,10 @@ const erc20MetaAbi = parseAbi([
   'function decimals() view returns (uint8)',
 ])
 
+const erc20BalanceAbi = parseAbi([
+  'function balanceOf(address) view returns (uint256)',
+])
+
 const swapExecutorAbi = parseAbi([
   'function exactInput((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key,(bool zeroForOne,int256 amountSpecified,uint160 sqrtPriceLimitX96) swap,uint256 maxInput,uint256 minOutput) payable returns (int256)',
 ])
@@ -109,6 +179,21 @@ type AdaptationEvent = {
   swapsObserved?: number
 }
 
+type FlapTokenStatus = {
+  name: string
+  symbol: string
+  decimals: number
+  deployerSkillBalanceRaw: string
+  deployerOkbBalanceWei: string
+  detected: boolean
+}
+
+type OracleSkipRecord = {
+  tx: Hash
+  blockNumber: bigint
+  reason: string
+}
+
 type DashboardState = {
   currentFee: number
   toxicScore: string
@@ -116,16 +201,54 @@ type DashboardState = {
   oraclePrice: string
   oracleUpdatedAt: number
   events: AdaptationEvent[]
+  oracleSkips: OracleSkipRecord[]
   feeEvolution: FeeEvolutionPoint[]
   memory: PoolMemory
+  flap: FlapTokenStatus
   lastRefresh: string
+}
+
+async function fetchFlapTokenStatus(): Promise<FlapTokenStatus> {
+  const skill = addresses.skill as Address
+  const deployer = addresses.deployer as Address
+  try {
+    const [name, symbol, decimals, skillBalance, okbBalance] = await Promise.all([
+      publicClient.readContract({ address: skill, abi: erc20MetaAbi, functionName: 'name' }),
+      publicClient.readContract({ address: skill, abi: erc20MetaAbi, functionName: 'symbol' }),
+      publicClient.readContract({ address: skill, abi: erc20MetaAbi, functionName: 'decimals' }),
+      publicClient.readContract({
+        address: skill,
+        abi: erc20BalanceAbi,
+        functionName: 'balanceOf',
+        args: [deployer],
+      }),
+      publicClient.getBalance({ address: deployer }),
+    ])
+    return {
+      name,
+      symbol,
+      decimals,
+      deployerSkillBalanceRaw: skillBalance.toString(),
+      deployerOkbBalanceWei: okbBalance.toString(),
+      detected: true,
+    }
+  } catch {
+    return {
+      name: 'Unavailable',
+      symbol: 'Unavailable',
+      decimals: 18,
+      deployerSkillBalanceRaw: '0',
+      deployerOkbBalanceWei: '0',
+      detected: false,
+    }
+  }
 }
 
 async function fetchDashboard(extraTxs: readonly Hash[] = []): Promise<DashboardState> {
   // Read the fixed proof transactions plus any swaps run live this session, so a
   // freshly-mined swap shows up in the event log immediately.
   const txs = Array.from(new Set<Hash>([...phase5Txs, ...extraTxs]))
-  const [currentFee, toxicScore, poolPrice, oracleRead, rawState, rawConfig, receipts] =
+  const [currentFee, toxicScore, poolPrice, oracleRead, rawState, rawConfig, receipts, flap] =
     await Promise.all([
       publicClient.readContract({
         address: addresses.hook,
@@ -163,10 +286,12 @@ async function fetchDashboard(extraTxs: readonly Hash[] = []): Promise<Dashboard
         functionName: 'config',
       }),
       Promise.all(txs.map((tx) => publicClient.getTransactionReceipt({ hash: tx }))),
+      fetchFlapTokenStatus(),
     ])
 
   let staleOracleSkips = 0
   const events: AdaptationEvent[] = []
+  const oracleSkips: OracleSkipRecord[] = []
   for (const receipt of receipts) {
     for (const log of receipt.logs) {
       if (log.address.toLowerCase() !== addresses.hook.toLowerCase()) continue
@@ -197,10 +322,16 @@ async function fetchDashboard(extraTxs: readonly Hash[] = []): Promise<Dashboard
         })
       } else if (decoded.eventName === 'OracleSkipped') {
         staleOracleSkips += 1
+        oracleSkips.push({
+          tx: receipt.transactionHash,
+          blockNumber: receipt.blockNumber,
+          reason: bytes32ToText(decoded.args.reason),
+        })
       }
     }
   }
   events.sort((a, b) => Number(a.blockNumber - b.blockNumber))
+  oracleSkips.sort((a, b) => Number(a.blockNumber - b.blockNumber))
 
   const feeEvolution: FeeEvolutionPoint[] = events.map((event) => ({
     blockNumber: event.blockNumber,
@@ -261,8 +392,10 @@ async function fetchDashboard(extraTxs: readonly Hash[] = []): Promise<Dashboard
     oraclePrice: oracleRead[0].toString(),
     oracleUpdatedAt: Number(oracleRead[1]),
     events,
+    oracleSkips,
     feeEvolution,
     memory,
+    flap,
     lastRefresh: new Date().toLocaleTimeString(),
   }
 }
@@ -335,7 +468,26 @@ function App() {
   // Hero CTA links to the MOST RECENT reflex event (or latest adaptation) from
   // the live event log — never a hardcoded transaction.
   const latestReflexTx = state?.events.filter((e) => e.type === 'REFLEX').at(-1)?.tx
+  const latestEvolutionTx = state?.events
+    .filter((e) => e.type === 'EVOLUTION_UP' || e.type === 'EVOLUTION_DOWN')
+    .at(-1)?.tx
   const latestProofTx = latestReflexTx ?? state?.events.at(-1)?.tx
+
+  // Compute the honest Flap proxy card status. Now that the SKILL/OKB v4 pool
+  // is initialized onchain (Option A pool-ready mode), the relevant honest
+  // states are: token-detection-failed, pool-initialized-awaiting-graduation
+  // (current — token transfer-restricts during the Flap bonding curve), or
+  // live (only after SKILL graduates and the pool is actually seeded).
+  const flapStatus:
+    | 'live'
+    | 'pool-initialized-awaiting-graduation'
+    | 'pool-creation-required'
+    | 'waiting-for-token-balance'
+    | 'token-detection-failed' = !state
+    ? 'token-detection-failed'
+    : !state.flap.detected
+      ? 'token-detection-failed'
+      : 'pool-initialized-awaiting-graduation'
 
   async function runToxicSwap() {
     if (!isOwner) {
@@ -435,12 +587,21 @@ function App() {
             <h1>The AMM that learns to defend its LPs.</h1>
             <p>
               HELIX measures pool-vs-oracle LVR pressure on every swap and rewrites its
-              Uniswap v4 dynamic fee curve inside hard-coded bounds.
+              Uniswap v4 dynamic fee curve within a fixed 0.05%–2.00% safety band.
             </p>
             <div className="hero-actions">
+              <button className="primary-button" onClick={() => scrollToId('oracle-backed-mode')} type="button">
+                View Live OKB/USDT0 Proof
+              </button>
+              <button className="ghost-button" onClick={() => scrollToIdAndFocus('flap-launch-mode', 'flap-launch-input')} type="button">
+                Check Flap Token
+              </button>
+              <button className="ghost-button" onClick={() => scrollToIdAndFocus('xlayer-token-checker', 'xlayer-checker-input')} type="button">
+                Check Any X Layer Token
+              </button>
               {latestProofTx ? (
-                <a className="primary-button" href={explorerTx(latestProofTx)} target="_blank" rel="noreferrer">
-                  {latestReflexTx ? 'View latest reflex tx' : 'View latest adaptation'}
+                <a className="ghost-button" href={explorerTx(latestProofTx)} target="_blank" rel="noreferrer">
+                  {latestReflexTx ? 'Latest reflex tx ↗' : 'Latest adaptation ↗'}
                 </a>
               ) : null}
               <button className="ghost-button" onClick={() => void refetch()} type="button">
@@ -464,6 +625,32 @@ function App() {
       </section>
 
       <section className="dashboard">
+        <section className="panel shortcut-strip">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">Choose Protection Mode</span>
+              <h2>Two modes, plus a checker for anything else.</h2>
+            </div>
+          </div>
+          <div className="shortcut-grid">
+            <button className="shortcut-card" onClick={() => scrollToId('oracle-backed-mode')} type="button">
+              <span className="eyebrow">Mode 1 / Oracle-backed LVR</span>
+              <strong>View Live OKB/USDT0 Proof</strong>
+              <small>Live oracle-backed proof pool. Reflex fees + baseline evolution proven with real X Layer transactions.</small>
+            </button>
+            <button className="shortcut-card" onClick={() => scrollToIdAndFocus('flap-launch-mode', 'flap-launch-input')} type="button">
+              <span className="eyebrow">Mode 2 / Flap Launch Protection</span>
+              <strong>Check Flap Token</strong>
+              <small>Paste a Flap token URL or address (e.g. SKILL). HELIX reads metadata live and shows Launch Protection Proxy readiness.</small>
+            </button>
+            <button className="shortcut-card" onClick={() => scrollToIdAndFocus('xlayer-token-checker', 'xlayer-checker-input')} type="button">
+              <span className="eyebrow">Mode 3 / Any X Layer token</span>
+              <strong>Check Any X Layer Token</strong>
+              <small>HELIX is a self-defending liquidity layer for X Layer pools — not just Flap. Paste any token to see which mode applies.</small>
+            </button>
+          </div>
+        </section>
+
         <div className="status-strip">
           <span>{status}</span>
           <span>Last refresh: {state?.lastRefresh ?? 'pending'}</span>
@@ -476,7 +663,58 @@ function App() {
           <Metric label="Pool raw price" value={state ? compact(state.poolPrice) : '--'} source="HelixHook.currentPoolPriceE18" />
         </div>
 
+        {state ? (
+          <ProtectionModesPanel
+            oracle={{
+              currentFeeBps: feeToBps(state.currentFee),
+              toxicScoreCompact: compact(state.toxicScore),
+              latestReflexTx: latestReflexTx ?? null,
+              latestEvolutionTx: latestEvolutionTx ?? null,
+              hookAddress: addresses.hook,
+              oracleAddress: addresses.oracle,
+              poolId,
+              pairLabel: 'OKB / USDT0',
+              explorerAddress,
+              explorerTx,
+            }}
+            flap={{
+              flapTokenAddress: addresses.skill,
+              flapTokenName: state.flap.name,
+              flapTokenSymbol: state.flap.symbol,
+              flapTokenDecimals: state.flap.decimals,
+              flapTokenUrl: flapSkillUrl,
+              pairCandidate: `${state.flap.symbol || 'SKILL'} / OKB`,
+              status: flapStatus,
+              deployerSkillBalance: state.flap.deployerSkillBalanceRaw,
+              deployerOkbBalance: state.flap.deployerOkbBalanceWei,
+              poolId: skillPool.poolId,
+              poolManagerAddress: addresses.poolManager,
+              hookAddress: skillPool.hookAddress,
+              latestTx: skillPool.initializeTx,
+              explorerAddress,
+              explorerTx,
+            }}
+            modeChecker={{
+              detectToken: detectFlapToken,
+              oracleCoveredToken: addresses.usdt0,
+            }}
+          />
+        ) : null}
+
         {state ? <PoolMemoryPanel memory={state.memory} /> : null}
+
+        <ProofPassportPanel passport={proofPassport} />
+
+        {state ? (
+          <PoolAutobiographyPanel
+            entries={buildPoolAutobiography({
+              events: state.events,
+              oracleSkips: state.oracleSkips,
+              memory: state.memory,
+              explorerTx,
+            })}
+          />
+        ) : null}
 
         <div className="panel-grid">
           <FeeCurveEvolutionChart
@@ -605,6 +843,24 @@ function explorerTx(tx: string) {
 
 function explorerAddress(address_: string) {
   return `${chain.explorer}/address/${address_}`
+}
+
+function scrollToId(id: string) {
+  if (typeof document === 'undefined') return
+  const el = document.getElementById(id)
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function scrollToIdAndFocus(panelId: string, inputId: string) {
+  scrollToId(panelId)
+  // Give smooth-scroll a moment before focusing so the focus jump does not
+  // override the smooth scroll.
+  setTimeout(() => {
+    if (typeof document === 'undefined') return
+    const input = document.getElementById(inputId) as HTMLInputElement | null
+    input?.focus()
+  }, 450)
 }
 
 export default App

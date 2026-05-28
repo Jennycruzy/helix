@@ -1,10 +1,21 @@
-# HELIX — the AMM that learns, on-chain, to defend its own LPs
+# HELIX — a self-defending liquidity layer for X Layer pools
 
-> A Uniswap v4 pool that measures the Loss-Versus-Rebalancing (LVR) inflicted on its liquidity
+> A Uniswap v4 hook that measures the Loss-Versus-Rebalancing (LVR) inflicted on its liquidity
 > providers and autonomously rewrites its own dynamic-fee curve — on-chain, within hard-coded
 > safety bounds — to drive that loss down over time.
 
-**Live on X Layer mainnet (chainId 196). Every claim below is backed by a verifiable transaction.**
+**HELIX is not only a Flap product. Flap is the launchpad use case. The broader product is
+self-defending liquidity for X Layer pools.** HELIX runs in two modes:
+
+1. **Oracle-backed LVR Mode** — for assets with reliable oracle coverage. Full LVR-style toxic-flow
+   detection and dynamic-fee adaptation. **Live proof: OKB/USDT0** on X Layer mainnet.
+2. **Flap Launch Protection Proxy Mode** — for newly Flap-launched tokens that may not yet have
+   reliable external feeds. **Example: SKILL (ClawHub)**. Surfaced in the dashboard as proxy mode;
+   no oracle is faked.
+
+OKB/USDT0 proves the full oracle-backed LVR mode. SKILL demonstrates the Flap Launch Protection
+pathway. **Live on X Layer mainnet (chainId 196). Every claim below is backed by a verifiable
+transaction.**
 
 ---
 
@@ -78,31 +89,60 @@ The narrative tying it together — **observe → measure → defend → evolve 
 
 In one line: **other defensive hooks classify wallets; HELIX evolves pools.**
 
+### 5. Pool Autobiography
+Pool Autobiography turns raw hook events into a readable timeline of how HELIX defended the pool —
+"At block N, HELIX detected toxic flow and raised the fee from 0.30% to 0.40%." Every card is
+reconstructed from a real `ReflexFeeQuoted`, `BaselineFeeUpdated`, or `OracleSkipped` event on X
+Layer (or from live `poolState`). Nothing is invented; the pool tells you, in plain English, what
+it did and why. Severity labels — **Defense / Evolution / Safety / Calm** — match the on-chain
+reason code so a judge can verify any card against the linked transaction.
+
+### 6. Proof Passport
+Proof Passport gives judges one place to verify the deployed hook, pool, oracle, and live
+adaptation transactions. Network, chain ID, hook address, PoolManager, pool ID, the protected pair,
+the oracle, deployment / pool-creation / reflex / evolution transactions, and the verified source
+URL are all rendered with copy buttons and OKLink X Layer explorer links. Anything that isn't yet
+proved is shown as **"Not provided yet"** rather than hidden — missing proof is never disguised.
+
 ---
 
-## Flap positioning
+## Two protection modes (honestly labeled)
 
-**HELIX is a self-defending liquidity layer for Flap-launched tokens on X Layer.**
+### Mode 1 — Oracle-backed LVR Mode (live proof: OKB/USDT0)
+For pairs with reliable oracle references. HELIX measures pool-vs-oracle divergence on every swap,
+applies a per-swap reflex fee when flow is toxic, and evolves the baseline fee over a cadence
+window. **OKB/USDT0 is the active live proof pool** — Chainlink OKB/USD and USDT/USD feeds on X
+Layer give it a real external reference, and the dashboard surfaces real X Layer transactions for
+both REFLEX and EVOLUTION events.
 
-Flap helps tokens launch and reach early trading activity. Those early pools are exactly where LPs
-are most exposed: thin liquidity attracts toxic flow and fast arbitrage, and early LPs bleed value
-when the pool price is repeatedly pushed away from the real market. HELIX watches the
-pool-vs-oracle gap and adapts the fee curve so the pool can defend itself from day one.
+### Mode 2 — Flap Launch Protection Proxy Mode (example: SKILL / ClawHub)
+For newly Flap-launched tokens that may not yet have reliable external oracle feeds. **SKILL
+(`0xED06d48a87F8B8b3E78AFD7DD59717A3f7317777`,
+[flap.sh page](https://flap.sh/xlayer/0xed06d48a87f8b8b3e78afd7dd59717a3f7317777))** is detected
+live from X Layer and protected by the **HelixFlapProxyHook**
+(`0x6c3eC6213b84c7E2267A24a81A2c23147e1950c0`), deployed live on X Layer mainnet
+([deploy tx](https://www.oklink.com/x-layer/tx/0xcbfd2a15da866958b9ac47b6c3a69b76dfedb73a0bf9b993be71db108d23caf9)).
+A new SKILL/OKB v4 pool with the hook attached
+([poolId](https://www.oklink.com/x-layer/tx/0x08474e3f4620902515811cd995775df6ed440f79cb9118298ba7b07c65a907cf)
+`0x74acb2620f3c441082cae8b8af709b0b48d59ac15be9824c37c4b549dd82fba7`) runs as a dynamic-fee pool:
+a launch shield starts at **5.00%** and linearly decays to a **0.50%** baseline over **20,000
+blocks**; any single swap larger than **5% of current pool liquidity** gets a one-swap **+0.50%**
+size-reflex bump. **No external oracle is consulted** for proxy mode. The existing oracle-backed
+HELIX hook is deliberately NOT reused for SKILL because its oracle reads OKB/USDT and would feed
+wrong references to a SKILL pool.
 
-**Integration type (honest label): direct contract/event-based Flap discovery + manual,
-oracle-covered HELIX pool.** Flap's `Portal` on X Layer (`0xb30D8c4216E1f21F27444D2FfAee3ad577808678`)
-emits token-creation and DEX-migration events that HELIX reads to discover and dashboard a
-Flap token. Exact oracle-anchored LVR requires a real external price reference, so the **live
-mainnet proof runs on `OKB/USDT0`**, a pair with canonical Chainlink feeds on X Layer. A fresh
-Flap memecoin without a third-party feed would require a clearly-labeled fallback oracle — we did
-not fake one. See [docs/GROUND_TRUTH.md](docs/GROUND_TRUTH.md) for the full ground-truth findings.
+**Honest status today (verify with the dashboard or scripts/CheckFlapToken.s.sol):** the
+HelixFlapProxyHook is live and the SKILL/OKB proxy pool is initialised on chain. Liquidity
+seeding still reverts at the SKILL token contract ("Transfers to/from pools are restricted in
+BondingCurve state") until SKILL graduates from the Flap bonding curve. The defense surface is
+wired up; once SKILL graduates and a seed succeeds, the hook will start adapting fees on real
+swaps. No fake oracle, no fake liquidity.
 
-**Two HELIX modes, honestly labeled:** *For assets with reliable oracle coverage, HELIX uses
-oracle-anchored LVR-like signals. For very new Flap tokens without a reliable oracle, HELIX
-operates in launch-protection mode using toxic-flow proxy signals.* The dashboard's **Flap Launch
-Protection** panel lets you paste any Flap token address or URL; it reads ERC-20 metadata live from
-X Layer (never mocked) and shows which mode applies. **Flap launches the token; HELIX protects the
-liquidity that comes after.**
+### Mode 3 — Any X Layer token (Mode Checker)
+The dashboard ships a generic checker: paste any X Layer token address (or Flap URL), and HELIX
+reads ERC-20 metadata live and recommends Oracle-backed LVR mode or Launch Protection Proxy mode.
+The Flap Portal (`0xb30D8c4216E1f21F27444D2FfAee3ad577808678`) is the discovery surface for
+Flap-launched tokens; HELIX is the defense surface for any X Layer pool that wants it.
 
 ---
 
@@ -146,12 +186,34 @@ Fee Curve Evolution timeline in the frontend.
 
 ---
 
-## Flap demo flow
+## Demo flow
+
+The dashboard hero shows three buttons so a judge can pick a mode without scrolling:
+
+1. **View Live OKB/USDT0 Proof** — scrolls to the Oracle-backed LVR card with live current fee,
+   toxic-flow score, hook + oracle addresses, latest REFLEX tx, latest EVOLUTION tx.
+2. **Check Flap Token** — scrolls to the Flap Launch Protection panel and auto-focuses an input.
+   Pasting the SKILL URL or address reads ERC-20 metadata live from X Layer and shows proxy-mode
+   readiness.
+3. **Check Any X Layer Token** — scrolls to the generic Mode Checker. Paste any X Layer token; the
+   checker returns the recommended mode (Oracle-backed LVR or Launch Protection Proxy).
+
+### Judge flow (one minute)
+
+1. Open the HELIX dashboard.
+2. Look at the Defense Epoch badge — the named mode the pool is currently in.
+3. Scroll to **Pool Autobiography** and read the most recent defense / evolution / safety card.
+4. Click the explorer link on any card to verify it on OKLink X Layer.
+5. Scroll to **Proof Passport**.
+6. Verify the hook address, oracle, deployment tx, reflex tx, and evolution tx all open on OKLink.
+7. Copy any address with the inline copy button if you want to compare with `deployments/xlayer-mainnet.json`.
+
+Pool Autobiography answers "What did the pool do?". Proof Passport answers "How can I verify this
+is real?".
+
+The live oracle-backed loop on OKB/USDT0:
 
 ```
- Launch / select a Flap token
-        │
-        ▼
  Initialize a Uniswap v4 pool protected by the HELIX hook  (DYNAMIC_FEE_FLAG)
         │
         ▼
@@ -312,6 +374,40 @@ Frontend behaviour (all verified to build/lint; live-wallet steps need the OKX e
 ### Live mainnet (spends real funds — opt-in)
 Scripts default to dry-run. Real broadcast requires the explicit `--broadcast` flag and prints a
 `THIS SPENDS REAL FUNDS ON X LAYER MAINNET` warning. Use the smallest amounts in `.env`.
+
+### Flap-token pool scripts (proxy-hook mode)
+Four scripts handle the SKILL / Flap-launch path. All four are safe to run without a key (they
+print status without broadcasting). The dedicated **HelixFlapProxyHook** carries defense logic
+that does not depend on any external oracle (launch-window fee decay + swap-size reflex), so the
+existing oracle-backed HELIX hook is intentionally not reused for SKILL.
+
+```sh
+# 1. Read-only sanity check (Flap token + deployer balances on X Layer mainnet)
+forge script contracts/script/CheckFlapToken.s.sol:CheckFlapToken \
+  --rpc-url https://rpc.xlayer.tech
+
+# Optional — check any token + wallet:
+forge script contracts/script/CheckFlapToken.s.sol:CheckFlapToken \
+  --rpc-url https://rpc.xlayer.tech \
+  --sig "runFor(address,address)" 0xed06d48a87f8b8b3e78afd7dd59717a3f7317777 <YOUR_WALLET>
+
+# 2. Dry-run proxy-hook deploy + pool init (no --broadcast = simulation only)
+forge script contracts/script/DeploySkillFlapProxy.s.sol:DeploySkillFlapProxy \
+  --rpc-url https://rpc.xlayer.tech
+
+# 3. Dry-run legacy pool-ready-mode init (kept for audit history)
+forge script contracts/script/CreateFlapHelixPool.s.sol:CreateFlapHelixPool \
+  --rpc-url https://rpc.xlayer.tech
+
+# 4. Dry-run seed (refuses to broadcast without SKILL + OKB balances + unlocked bonding curve)
+forge script contracts/script/SeedFlapHelixPool.s.sol:SeedFlapHelixPool \
+  --rpc-url https://rpc.xlayer.tech
+```
+
+Real broadcast of the proxy hook requires (1) `DEPLOYER_PRIVATE_KEY` set, (2) an
+honestly-derived `INITIAL_SQRT_PRICE_X96`, (3) deployer holds at least 0.005 OKB for gas. The
+deploy script refuses to send if those conditions are not met. Real broadcast of seeding
+additionally requires SKILL graduation from the Flap bonding curve.
 
 ### Re-verify source on the explorer (already done; no spend)
 The deployed contracts are already verified. To reproduce, set `OK_ACCESS_KEY` (OKLink API key) in

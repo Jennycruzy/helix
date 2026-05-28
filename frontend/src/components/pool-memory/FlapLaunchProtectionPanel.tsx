@@ -69,11 +69,11 @@ export function FlapLaunchProtectionPanel({
   }
 
   return (
-    <section className="panel flap-protection-panel">
+    <section id="flap-launch-mode" className="panel flap-protection-panel">
       <div className="panel-heading">
         <div>
           <span className="eyebrow">Flap Launch Protection</span>
-          <h2>Flap launches the token. HELIX protects the liquidity after.</h2>
+          <h2>Paste a Flap token URL or address.</h2>
         </div>
         <a href={explorerAddress(flapPortal)} target="_blank" rel="noreferrer">
           Flap Portal
@@ -81,13 +81,14 @@ export function FlapLaunchProtectionPanel({
       </div>
 
       <p className="panel-copy">
-        For assets with reliable oracle coverage, HELIX uses oracle-anchored LVR-like
-        signals. For very new Flap tokens without a reliable oracle, HELIX operates in
-        launch-protection mode using toxic-flow proxy signals.
+        HELIX reads ERC-20 metadata live from X Layer and shows whether the token is ready for
+        Launch Protection Proxy Mode. For assets with reliable oracle coverage (e.g. OKB/USDT0),
+        HELIX uses oracle-anchored LVR-like signals instead.
       </p>
 
       <div className="flap-detect">
         <input
+          id="flap-launch-input"
           className="flap-input"
           placeholder="Paste Flap token address or Flap URL"
           value={input}
@@ -112,7 +113,7 @@ export function FlapLaunchProtectionPanel({
             value={
               isOracleBacked
                 ? 'Reliable feed available — oracle-anchored LVR active.'
-                : 'No reliable feed assumed — proxy launch protection. Very new Flap tokens often have no oracle yet.'
+                : 'No reliable feed assumed. HelixFlapProxyHook applies a launch-shield fee that decays to baseline plus a size-reflex bump on outsized swaps. No oracle is consulted.'
             }
           />
         </div>

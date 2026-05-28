@@ -7,6 +7,108 @@
   },
   "deployer": "0x0Ac6bf160e208e67AF06d7F00c92AEfBbf089f95",
   "activeDemoDeployment": "okb-usdt0",
+  "skillOkbProxyPool": {
+    "status": "proxy-hook-live-awaiting-liquidity",
+    "note": "Real Uniswap v4 SKILL/OKB pool with the HelixFlapProxyHook attached, deployed on X Layer mainnet 2026-05-28. Dynamic fee starts at the launch-shield value and decays to baseline; large swaps trigger a one-swap size-reflex bump. Pool still cannot be liquidity-seeded yet because the SKILL token contract enforces 'Transfers to/from pools are restricted in BondingCurve state' until SKILL graduates from the Flap bonding curve. A previous SKILL/OKB pool with hooks=address(0) and static fee was initialised earlier the same day; both pools coexist on chain because Uniswap v4 pools are immutable.",
+    "proxyHook": {
+      "name": "HelixFlapProxyHook",
+      "address": "0x6c3eC6213b84c7E2267A24a81A2c23147e1950c0",
+      "create2Salt": "0x0000000000000000000000000000000000000000000000000000000000000d0c",
+      "permissions": {
+        "afterInitialize": true,
+        "beforeSwap": true,
+        "afterSwap": true,
+        "returnDeltaFlags": false
+      },
+      "config": {
+        "launchFee": 50000,
+        "baselineFee": 5000,
+        "decayBlocks": 20000,
+        "reflexFeeDelta": 5000,
+        "swapSizeReflexBps": 500
+      },
+      "configHuman": {
+        "launchFee": "5.00% (at pool init block)",
+        "baselineFee": "0.50% (after 20000 blocks of linear decay)",
+        "decayBlocks": "20000 X Layer blocks (~1 hour at ~2s blocks)",
+        "reflexFeeDelta": "+0.50% added to the current decayed baseline for any single swap that exceeds the size threshold",
+        "swapSizeReflexBps": "swap |amountSpecified| > 5.00% of current pool liquidity triggers reflex"
+      },
+      "deployTx": "0xcbfd2a15da866958b9ac47b6c3a69b76dfedb73a0bf9b993be71db108d23caf9",
+      "deployBlock": 61209144,
+      "deployGasUsed": 1982571,
+      "initializeTx": "0x42c1863ee70b96b341dbd397f4103c233da1c43dfb40d87b5d37c4cf59179c4e",
+      "initializeBlock": 61209147,
+      "initializeGasUsed": 149191
+    },
+    "proxyPool": {
+      "poolManager": "0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32",
+      "dynamicFeeFlag": "0x800000",
+      "tickSpacing": 60,
+      "hooks": "0x6c3eC6213b84c7E2267A24a81A2c23147e1950c0",
+      "poolId": "0x74acb2620f3c441082cae8b8af709b0b48d59ac15be9824c37c4b549dd82fba7",
+      "sqrtPriceX96AtInitialize": "292223702661591749708025597788160",
+      "initialTick": 164267,
+      "initializeTx": "0x08474e3f4620902515811cd995775df6ed440f79cb9118298ba7b07c65a907cf",
+      "initializeBlock": 61209149,
+      "initializeGasUsed": 91178,
+      "initializeStatus": "0x1"
+    },
+    "predecessorHooklessPool": {
+      "note": "Earlier SKILL/OKB pool, hooks=address(0), static 0.30% fee. Kept on-chain because v4 pools are immutable; superseded by proxyPool above.",
+      "poolId": "0xc910656a0f753c9a5629cf9722038a0ded4bdc7ea6a4b95050d5375bde48f086",
+      "fee": 3000,
+      "initializeTx": "0x9f293eb754b5943311aebc7d1db99011422546558175a68b7ffd07f6a4c7255a"
+    },
+    "pair": {
+      "name": "SKILL/OKB",
+      "currency0": {
+        "symbol": "OKB",
+        "type": "native",
+        "address": "0x0000000000000000000000000000000000000000",
+        "decimals": 18
+      },
+      "currency1": {
+        "symbol": "SKILL",
+        "name": "ClawHub",
+        "type": "erc20",
+        "address": "0xED06d48a87F8B8b3E78AFD7DD59717A3f7317777",
+        "decimals": 18,
+        "totalSupply": "1000000000000000000000000000",
+        "flapUrl": "https://flap.sh/xlayer/0xed06d48a87f8b8b3e78afd7dd59717a3f7317777",
+        "owner": "0xb30D8c4216E1f21F27444D2FfAee3ad577808678",
+        "transferRestrictionAtPools": true
+      },
+      "flapCurveStateAtInit": {
+        "okbRaisedRaw": "12472917740439550554",
+        "skillSoldRaw": "339367121528875233831392833",
+        "curveAllocationRaw": "800000000000000000000000000",
+        "fractionSoldBps": 4242,
+        "averagePriceSkillPerOkb": 27208319,
+        "linearSpotEstimateSkillPerOkb": 13604159
+      }
+    },
+    "seeding": {
+      "status": "blocked-by-skill-bonding-curve",
+      "attemptedAtBlock": 61199699,
+      "revertReason": "Transfers to/from pools are restricted in BondingCurve state",
+      "revertOriginContract": "0xED06d48a87F8B8b3E78AFD7DD59717A3f7317777",
+      "deployerSkillBalanceRaw": "119330940206505997712293",
+      "deployerOkbBalanceWeiAfterInit": "66066525746896209",
+      "totalOkbSpentWei": "44458802222940",
+      "totalSkillSpentRaw": "0",
+      "unblockCondition": "SKILL must graduate from the Flap bonding curve (Flap Portal 0xb30D8c4216E1f21F27444D2FfAee3ad577808678) before its transfer restriction lifts and the new proxyPool above can be seeded."
+    },
+    "explorerLinks": {
+      "skillToken": "https://www.oklink.com/x-layer/address/0xED06d48a87F8B8b3E78AFD7DD59717A3f7317777",
+      "flapPortal": "https://www.oklink.com/x-layer/address/0xb30D8c4216E1f21F27444D2FfAee3ad577808678",
+      "proxyHook": "https://www.oklink.com/x-layer/address/0x6c3eC6213b84c7E2267A24a81A2c23147e1950c0",
+      "proxyHookDeployTx": "https://www.oklink.com/x-layer/tx/0xcbfd2a15da866958b9ac47b6c3a69b76dfedb73a0bf9b993be71db108d23caf9",
+      "proxyHookInitializeTx": "https://www.oklink.com/x-layer/tx/0x42c1863ee70b96b341dbd397f4103c233da1c43dfb40d87b5d37c4cf59179c4e",
+      "proxyPoolInitializeTx": "https://www.oklink.com/x-layer/tx/0x08474e3f4620902515811cd995775df6ed440f79cb9118298ba7b07c65a907cf",
+      "predecessorHooklessPoolInitializeTx": "https://www.oklink.com/x-layer/tx/0x9f293eb754b5943311aebc7d1db99011422546558175a68b7ffd07f6a4c7255a"
+    }
+  },
   "deployments": {
     "okb-usdt0": {
       "status": "active-demo-path",
