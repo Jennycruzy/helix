@@ -195,6 +195,16 @@ type OracleSkipRecord = {
   reason: string
 }
 
+type DashboardTab = 'live' | 'autobio' | 'passport' | 'memory' | 'modes'
+
+const TAB_DEFS: ReadonlyArray<{ id: DashboardTab; title: string; sub: string }> = [
+  { id: 'live', title: 'Live Defense', sub: 'Metrics · Run swap · Chart' },
+  { id: 'autobio', title: 'Pool Autobiography', sub: 'Readable defense timeline' },
+  { id: 'passport', title: 'Proof Passport', sub: 'Verify on OKLink' },
+  { id: 'memory', title: 'Pool Memory', sub: 'Epoch · Learning loop' },
+  { id: 'modes', title: 'Protection Modes', sub: 'Flap · Checker · Events' },
+]
+
 type DashboardState = {
   currentFee: number
   toxicScore: string
@@ -447,6 +457,23 @@ function App() {
   const [runStatus, setRunStatus] = useState('')
   const [lastSwapTx, setLastSwapTx] = useState<Hash | null>(null)
   const [sessionTxs, setSessionTxs] = useState<Hash[]>([])
+  const [tab, setTab] = useState<DashboardTab>('live')
+
+  // Switch tab, scroll the dashboard into view after React renders the new
+  // tab, and optionally focus an input inside it (used by the hero buttons
+  // for Check Flap Token / Check Any X Layer Token).
+  function switchTab(next: DashboardTab, focusInputId?: string) {
+    setTab(next)
+    setTimeout(() => {
+      scrollToId('dashboard')
+      if (focusInputId) {
+        setTimeout(() => {
+          const el = document.getElementById(focusInputId) as HTMLInputElement | null
+          el?.focus()
+        }, 380)
+      }
+    }, 60)
+  }
   const {
     data: state,
     error,
@@ -603,13 +630,13 @@ function App() {
               Uniswap v4 dynamic fee curve within a fixed 0.05%–2.00% safety band.
             </p>
             <div className="hero-actions">
-              <button className="primary-button" onClick={() => scrollToId('oracle-backed-mode')} type="button">
+              <button className="primary-button" onClick={() => switchTab('live')} type="button">
                 View Live OKB/USDT0 Proof
               </button>
-              <button className="ghost-button" onClick={() => scrollToIdAndFocus('flap-launch-mode', 'flap-launch-input')} type="button">
+              <button className="ghost-button" onClick={() => switchTab('modes', 'flap-launch-input')} type="button">
                 Check Flap Token
               </button>
-              <button className="ghost-button" onClick={() => scrollToIdAndFocus('xlayer-token-checker', 'xlayer-checker-input')} type="button">
+              <button className="ghost-button" onClick={() => switchTab('modes', 'xlayer-checker-input')} type="button">
                 Check Any X Layer Token
               </button>
               {latestProofTx ? (
@@ -637,38 +664,29 @@ function App() {
         </div>
       </section>
 
-      <section className="dashboard">
-        <section className="panel shortcut-strip">
-          <div className="panel-heading">
-            <div>
-              <span className="eyebrow">Choose Protection Mode</span>
-              <h2>Two modes, plus a checker for anything else.</h2>
-            </div>
-          </div>
-          <div className="shortcut-grid">
-            <button className="shortcut-card" onClick={() => scrollToId('oracle-backed-mode')} type="button">
-              <span className="eyebrow">Mode 1 / Oracle-backed LVR</span>
-              <strong>View Live OKB/USDT0 Proof</strong>
-              <small>Live oracle-backed proof pool. Reflex fees + baseline evolution proven with real X Layer transactions.</small>
+      <section className="dashboard" id="dashboard">
+        <nav className="tab-nav" aria-label="Dashboard sections">
+          {TAB_DEFS.map((def) => (
+            <button
+              key={def.id}
+              className={`tab-button${tab === def.id ? ' active' : ''}`}
+              onClick={() => setTab(def.id)}
+              type="button"
+              aria-pressed={tab === def.id}
+            >
+              <span className="tab-button-title">{def.title}</span>
+              <span className="tab-button-sub">{def.sub}</span>
             </button>
-            <button className="shortcut-card" onClick={() => scrollToIdAndFocus('flap-launch-mode', 'flap-launch-input')} type="button">
-              <span className="eyebrow">Mode 2 / Flap Launch Protection</span>
-              <strong>Check Flap Token</strong>
-              <small>Paste a Flap token URL or address (e.g. SKILL). HELIX reads metadata live and shows Launch Protection Proxy readiness.</small>
-            </button>
-            <button className="shortcut-card" onClick={() => scrollToIdAndFocus('xlayer-token-checker', 'xlayer-checker-input')} type="button">
-              <span className="eyebrow">Mode 3 / Any X Layer token</span>
-              <strong>Check Any X Layer Token</strong>
-              <small>HELIX is a self-defending liquidity layer for X Layer pools — not just Flap. Paste any token to see which mode applies.</small>
-            </button>
-          </div>
-        </section>
+          ))}
+        </nav>
 
         <div className="status-strip">
           <span>{status}</span>
           <span>Last refresh: {state?.lastRefresh ?? 'pending'}</span>
         </div>
 
+        {tab === 'live' ? (
+        <>
         <div className="metric-grid">
           <Metric label="Current fee" value={state ? `${feeToBps(state.currentFee)} bps` : '--'} source="HelixHook.currentFee" />
           <Metric label="Toxic-flow score" value={state ? compact(state.toxicScore) : '--'} source="HelixHook.currentToxicFlowScore" />
@@ -715,8 +733,8 @@ function App() {
           <p className="panel-copy">
             Sends a real 0.005 USDT0 toxic swap through the deployed
             <code> HelixSwapExecutor</code> on X Layer. The pool reacts on the next block —
-            the fee tile above moves, a new card appears in Pool Autobiography, and a new
-            point lands on the fee-evolution chart below.
+            the fee tile above moves, a new card appears in <strong>Pool Autobiography</strong>,
+            and a new point lands on the fee-evolution chart below.
           </p>
           <button className="danger-button" disabled={!isOwner} onClick={runToxicSwap} type="button">
             Run real toxic swap
@@ -729,108 +747,129 @@ function App() {
           ) : null}
         </section>
 
-        {state ? (
-          <ProtectionModesPanel
-            oracle={{
-              currentFeeBps: feeToBps(state.currentFee),
-              toxicScoreCompact: compact(state.toxicScore),
-              latestReflexTx: latestReflexTx ?? null,
-              latestEvolutionTx: latestEvolutionTx ?? null,
-              hookAddress: addresses.hook,
-              oracleAddress: addresses.oracle,
-              poolId,
-              pairLabel: 'OKB / USDT0',
-              explorerAddress,
-              explorerTx,
-            }}
-            flap={{
-              flapTokenAddress: addresses.skill,
-              flapTokenName: state.flap.name,
-              flapTokenSymbol: state.flap.symbol,
-              flapTokenDecimals: state.flap.decimals,
-              flapTokenUrl: flapSkillUrl,
-              pairCandidate: `${state.flap.symbol || 'SKILL'} / OKB`,
-              status: flapStatus,
-              deployerSkillBalance: state.flap.deployerSkillBalanceRaw,
-              deployerOkbBalance: state.flap.deployerOkbBalanceWei,
-              poolId: skillPool.poolId,
-              poolManagerAddress: addresses.poolManager,
-              hookAddress: skillPool.hookAddress,
-              latestTx: skillPool.initializeTx,
-              explorerAddress,
-              explorerTx,
-            }}
-            modeChecker={{
-              detectToken: detectFlapToken,
-              oracleCoveredToken: addresses.usdt0,
-            }}
-          />
-        ) : null}
-
-        {state ? <PoolMemoryPanel memory={state.memory} /> : null}
-
-        <ProofPassportPanel passport={proofPassport} />
-
-        {state ? (
-          <PoolAutobiographyPanel
-            entries={buildPoolAutobiography({
-              events: state.events,
-              oracleSkips: state.oracleSkips,
-              memory: state.memory,
-              explorerTx,
-            })}
-          />
-        ) : null}
-
         <FeeCurveEvolutionChart
           points={state?.feeEvolution ?? []}
           currentFeeBps={state?.currentFee ?? 0}
         />
+        </>
+        ) : null}
 
-        <section className="panel">
-          <div className="panel-heading">
-            <div>
-              <span className="eyebrow">Flap token pool dashboard</span>
-              <h2>Flap-ready launch protection surface</h2>
-            </div>
-            <a href={explorerAddress(addresses.flapPortal)} target="_blank">Flap Portal</a>
-          </div>
-          <div className="flap-grid">
-            <Fact label="Integration type" value="Contract/event-based Flap discovery + manual oracle-covered HELIX pool" />
-            <Fact label="Selected pool" value="OKB / USDT0 exact-LVR demo pool" />
-            <Fact label="Token address" value={addresses.usdt0} />
-            <Fact label="Launch timestamp" value="Unavailable: USDT0 is not a Flap-launched token" />
-            <Fact label="PoolId" value={poolId} />
-            <Fact label="Hook address" value={addresses.hook} />
-          </div>
-          <p className="panel-copy">
-            For a newly launched Flap token, HELIX can discover token metadata from the
-            Flap Portal events. Exact LVR still requires a real external price reference;
-            the live proof therefore uses OKB/USDT0 where Chainlink feeds exist.
-          </p>
-        </section>
+        {tab === 'autobio' ? (
+          state ? (
+            <PoolAutobiographyPanel
+              entries={buildPoolAutobiography({
+                events: state.events,
+                oracleSkips: state.oracleSkips,
+                memory: state.memory,
+                explorerTx,
+              })}
+            />
+          ) : (
+            <p className="run-status">Loading live events from X Layer…</p>
+          )
+        ) : null}
 
-        <LearningLoopExplainer />
+        {tab === 'passport' ? (
+          <ProofPassportPanel passport={proofPassport} />
+        ) : null}
 
-        <FlapLaunchProtectionPanel
-          oracleCoveredToken={addresses.usdt0}
-          flapPortal={addresses.flapPortal}
-          explorerAddress={explorerAddress}
-          detectToken={detectFlapToken}
-        />
+        {tab === 'memory' ? (
+          state ? (
+            <>
+              <PoolMemoryPanel memory={state.memory} />
+              <LearningLoopExplainer />
+            </>
+          ) : (
+            <p className="run-status">Loading live pool memory from X Layer…</p>
+          )
+        ) : null}
 
-        <section className="event-list">
-          {state?.events.map((event) => (
-            <article className="event-card" key={`${event.tx}-${event.type}`}>
-              <div>
-                <span className={`event-kind ${event.type === 'REFLEX' ? 'reflex' : 'evolution'}`}>{event.type}</span>
-                <h3>{event.oldFee} to {event.newFee}</h3>
-                <p>LVR signal {compact(event.lvrSignal)} / oracle {compact(event.oraclePriceE18)} / pool {compact(event.poolPriceE18)}</p>
-              </div>
-              <a href={explorerTx(event.tx)} target="_blank">{shortHash(event.tx)}</a>
-            </article>
-          ))}
-        </section>
+        {tab === 'modes' ? (
+          state ? (
+            <>
+              <ProtectionModesPanel
+                oracle={{
+                  currentFeeBps: feeToBps(state.currentFee),
+                  toxicScoreCompact: compact(state.toxicScore),
+                  latestReflexTx: latestReflexTx ?? null,
+                  latestEvolutionTx: latestEvolutionTx ?? null,
+                  hookAddress: addresses.hook,
+                  oracleAddress: addresses.oracle,
+                  poolId,
+                  pairLabel: 'OKB / USDT0',
+                  explorerAddress,
+                  explorerTx,
+                }}
+                flap={{
+                  flapTokenAddress: addresses.skill,
+                  flapTokenName: state.flap.name,
+                  flapTokenSymbol: state.flap.symbol,
+                  flapTokenDecimals: state.flap.decimals,
+                  flapTokenUrl: flapSkillUrl,
+                  pairCandidate: `${state.flap.symbol || 'SKILL'} / OKB`,
+                  status: flapStatus,
+                  deployerSkillBalance: state.flap.deployerSkillBalanceRaw,
+                  deployerOkbBalance: state.flap.deployerOkbBalanceWei,
+                  poolId: skillPool.poolId,
+                  poolManagerAddress: addresses.poolManager,
+                  hookAddress: skillPool.hookAddress,
+                  latestTx: skillPool.initializeTx,
+                  explorerAddress,
+                  explorerTx,
+                }}
+                modeChecker={{
+                  detectToken: detectFlapToken,
+                  oracleCoveredToken: addresses.usdt0,
+                }}
+              />
+
+              <section className="panel">
+                <div className="panel-heading">
+                  <div>
+                    <span className="eyebrow">Flap token pool dashboard</span>
+                    <h2>Flap-ready launch protection surface</h2>
+                  </div>
+                  <a href={explorerAddress(addresses.flapPortal)} target="_blank">Flap Portal</a>
+                </div>
+                <div className="flap-grid">
+                  <Fact label="Integration type" value="Contract/event-based Flap discovery + manual oracle-covered HELIX pool" />
+                  <Fact label="Selected pool" value="OKB / USDT0 exact-LVR demo pool" />
+                  <Fact label="Token address" value={addresses.usdt0} />
+                  <Fact label="Launch timestamp" value="Unavailable: USDT0 is not a Flap-launched token" />
+                  <Fact label="PoolId" value={poolId} />
+                  <Fact label="Hook address" value={addresses.hook} />
+                </div>
+                <p className="panel-copy">
+                  For a newly launched Flap token, HELIX can discover token metadata from the
+                  Flap Portal events. Exact LVR still requires a real external price reference;
+                  the live proof therefore uses OKB/USDT0 where Chainlink feeds exist.
+                </p>
+              </section>
+
+              <FlapLaunchProtectionPanel
+                oracleCoveredToken={addresses.usdt0}
+                flapPortal={addresses.flapPortal}
+                explorerAddress={explorerAddress}
+                detectToken={detectFlapToken}
+              />
+
+              <section className="event-list">
+                {state.events.map((event) => (
+                  <article className="event-card" key={`${event.tx}-${event.type}`}>
+                    <div>
+                      <span className={`event-kind ${event.type === 'REFLEX' ? 'reflex' : 'evolution'}`}>{event.type}</span>
+                      <h3>{event.oldFee} to {event.newFee}</h3>
+                      <p>LVR signal {compact(event.lvrSignal)} / oracle {compact(event.oraclePriceE18)} / pool {compact(event.poolPriceE18)}</p>
+                    </div>
+                    <a href={explorerTx(event.tx)} target="_blank">{shortHash(event.tx)}</a>
+                  </article>
+                ))}
+              </section>
+            </>
+          ) : (
+            <p className="run-status">Loading X Layer state…</p>
+          )
+        ) : null}
       </section>
     </main>
   )
@@ -904,17 +943,6 @@ function scrollToId(id: string) {
   const el = document.getElementById(id)
   if (!el) return
   el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
-function scrollToIdAndFocus(panelId: string, inputId: string) {
-  scrollToId(panelId)
-  // Give smooth-scroll a moment before focusing so the focus jump does not
-  // override the smooth scroll.
-  setTimeout(() => {
-    if (typeof document === 'undefined') return
-    const input = document.getElementById(inputId) as HTMLInputElement | null
-    input?.focus()
-  }, 450)
 }
 
 export default App
