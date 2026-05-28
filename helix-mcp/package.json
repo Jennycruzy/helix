@@ -1,0 +1,33 @@
+{
+  "name": "helix-mcp",
+  "version": "0.1.0",
+  "description": "HELIX as a pluggable AI-agent skill: check protection mode for any X Layer token, read live pool state, summarize defense history, all via MCP.",
+  "type": "module",
+  "bin": {
+    "helix-mcp": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "viem": "^2.21.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

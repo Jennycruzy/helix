@@ -104,6 +104,24 @@ the oracle, deployment / pool-creation / reflex / evolution transactions, and th
 URL are all rendered with copy buttons and OKLink X Layer explorer links. Anything that isn't yet
 proved is shown as **"Not provided yet"** rather than hidden — missing proof is never disguised.
 
+### 7. HELIX as a pluggable AI-agent skill (MCP)
+HELIX ships an MCP server in [`helix-mcp/`](./helix-mcp) that turns the whole defense surface into
+a **pluggable AI-agent skill**. Drop one JSON snippet into Claude Desktop / Cursor / Windsurf /
+Cline and any agent can call HELIX with **one prompt for any token of your choice** — not just the
+deployed OKB/USDT0 proof pool. Six live, read-only tools against X Layer mainnet:
+
+- `helix_check_mode(tokenAddress)` — recommend Oracle-backed LVR / Launch Protection Proxy.
+- `helix_pool_state(poolId?)` — live current fee, toxic-flow score, oracle/pool prices, config.
+- `helix_pool_autobiography(poolId?)` — plain-English timeline of past defense events.
+- `helix_pool_memory(poolId?)` — current Defense Epoch + thresholds + counters.
+- `helix_token_info(tokenAddress)` — live ERC-20 metadata.
+- `helix_proof_passport()` — deployment addresses + proof tx hashes + verification URLs.
+
+Install with one config block (see [`helix-mcp/README.md`](./helix-mcp/README.md)), then prompt:
+
+> *"Using HELIX, check what protection mode I should use for token `0x...` on X Layer, pull the live
+> state of the default HELIX pool, and summarize its last few defenses."*
+
 ---
 
 ## Two protection modes (honestly labeled)
