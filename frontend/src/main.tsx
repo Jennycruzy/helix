@@ -6,6 +6,7 @@ import { injected } from 'wagmi/connectors'
 import { defineChain, type EIP1193Provider } from 'viem'
 import './index.css'
 import App from './App.tsx'
+import { XLAYER_RPC_URL } from './chainConfig'
 
 declare global {
   interface Window {
@@ -13,12 +14,6 @@ declare global {
     ethereum?: EIP1193Provider & { isOkxWallet?: boolean }
   }
 }
-
-// Optional RPC override for production / Vercel. If VITE_XLAYER_RPC_URL is
-// unset we fall back to X Layer's public RPC, so local dev keeps working
-// without any config and a fresh deploy needs zero env vars.
-export const XLAYER_RPC_URL =
-  import.meta.env.VITE_XLAYER_RPC_URL ?? 'https://rpc.xlayer.tech'
 
 const xLayer = defineChain({
   id: 196,

@@ -16,7 +16,7 @@ import {
   useWriteContract,
 } from 'wagmi'
 import './App.css'
-import { XLAYER_RPC_URL } from './main'
+import { XLAYER_RPC_URL } from './chainConfig'
 import { buildPoolMemory } from './lib/poolMemory'
 import { PoolMemoryPanel } from './components/pool-memory/PoolMemoryPanel'
 import { FeeCurveEvolutionChart } from './components/pool-memory/FeeCurveEvolutionChart'
