@@ -206,6 +206,7 @@ type DashboardState = {
   memory: PoolMemory
   flap: FlapTokenStatus
   lastRefresh: string
+  currentBlock: bigint
 }
 
 async function fetchFlapTokenStatus(): Promise<FlapTokenStatus> {
@@ -248,46 +249,56 @@ async function fetchDashboard(extraTxs: readonly Hash[] = []): Promise<Dashboard
   // Read the fixed proof transactions plus any swaps run live this session, so a
   // freshly-mined swap shows up in the event log immediately.
   const txs = Array.from(new Set<Hash>([...phase5Txs, ...extraTxs]))
-  const [currentFee, toxicScore, poolPrice, oracleRead, rawState, rawConfig, receipts, flap] =
-    await Promise.all([
-      publicClient.readContract({
-        address: addresses.hook,
-        abi: hookAbi,
-        functionName: 'currentFee',
-        args: [poolKey],
-      }),
-      publicClient.readContract({
-        address: addresses.hook,
-        abi: hookAbi,
-        functionName: 'currentToxicFlowScore',
-        args: [poolKey],
-      }),
-      publicClient.readContract({
-        address: addresses.hook,
-        abi: hookAbi,
-        functionName: 'currentPoolPriceE18',
-        args: [poolKey],
-      }),
-      publicClient.readContract({
-        address: addresses.oracle,
-        abi: oracleAbi,
-        functionName: 'read',
-        args: [poolKey],
-      }),
-      publicClient.readContract({
-        address: addresses.hook,
-        abi: hookAbi,
-        functionName: 'poolState',
-        args: [poolId],
-      }),
-      publicClient.readContract({
-        address: addresses.hook,
-        abi: hookAbi,
-        functionName: 'config',
-      }),
-      Promise.all(txs.map((tx) => publicClient.getTransactionReceipt({ hash: tx }))),
-      fetchFlapTokenStatus(),
-    ])
+  const [
+    currentFee,
+    toxicScore,
+    poolPrice,
+    oracleRead,
+    rawState,
+    rawConfig,
+    receipts,
+    flap,
+    currentBlock,
+  ] = await Promise.all([
+    publicClient.readContract({
+      address: addresses.hook,
+      abi: hookAbi,
+      functionName: 'currentFee',
+      args: [poolKey],
+    }),
+    publicClient.readContract({
+      address: addresses.hook,
+      abi: hookAbi,
+      functionName: 'currentToxicFlowScore',
+      args: [poolKey],
+    }),
+    publicClient.readContract({
+      address: addresses.hook,
+      abi: hookAbi,
+      functionName: 'currentPoolPriceE18',
+      args: [poolKey],
+    }),
+    publicClient.readContract({
+      address: addresses.oracle,
+      abi: oracleAbi,
+      functionName: 'read',
+      args: [poolKey],
+    }),
+    publicClient.readContract({
+      address: addresses.hook,
+      abi: hookAbi,
+      functionName: 'poolState',
+      args: [poolId],
+    }),
+    publicClient.readContract({
+      address: addresses.hook,
+      abi: hookAbi,
+      functionName: 'config',
+    }),
+    Promise.all(txs.map((tx) => publicClient.getTransactionReceipt({ hash: tx }))),
+    fetchFlapTokenStatus(),
+    publicClient.getBlockNumber(),
+  ])
 
   let staleOracleSkips = 0
   const events: AdaptationEvent[] = []
@@ -397,6 +408,7 @@ async function fetchDashboard(extraTxs: readonly Hash[] = []): Promise<Dashboard
     memory,
     flap,
     lastRefresh: new Date().toLocaleTimeString(),
+    currentBlock,
   }
 }
 
@@ -663,6 +675,35 @@ function App() {
           <Metric label="Pool raw price" value={state ? compact(state.poolPrice) : '--'} source="HelixHook.currentPoolPriceE18" />
         </div>
 
+        {state ? (() => {
+          // Freshness note for the metric tiles above. The "last on-chain fee
+          // update" is the most recent BaselineFeeUpdated / ReflexFeeQuoted
+          // event from the live event log — never a hardcoded block or tx.
+          const lastFeeChange = state.events.at(-1)
+          if (!lastFeeChange) {
+            return (
+              <p className="freshness-note">
+                No on-chain fee adaptations yet. Current block on X Layer:{' '}
+                <strong>{state.currentBlock.toString()}</strong>.
+              </p>
+            )
+          }
+          const delta = state.currentBlock - lastFeeChange.blockNumber
+          const age = humanizeBlockAge(delta < 0n ? 0n : delta)
+          const kindLabel = lastFeeChange.type === 'REFLEX' ? 'reflex' : 'baseline evolution'
+          return (
+            <p className="freshness-note">
+              Last on-chain fee update: {kindLabel} at block{' '}
+              <strong>{lastFeeChange.blockNumber.toString()}</strong> (≈{age} ago) ·{' '}
+              <a href={explorerTx(lastFeeChange.tx)} target="_blank" rel="noreferrer">
+                tx {shortHash(lastFeeChange.tx)} ↗
+              </a>
+              {'  '}· current X Layer block <strong>{state.currentBlock.toString()}</strong>.
+              The fee only moves when a new reflex or baseline-evolution event lands on chain.
+            </p>
+          )
+        })() : null}
+
         <section className="panel trigger-panel">
           <div className="panel-heading">
             <div>
@@ -834,6 +875,19 @@ function compact(value: string) {
 
 function shortHash(value: string) {
   return `${value.slice(0, 6)}...${value.slice(-4)}`
+}
+
+// X Layer mainnet runs at ~2 second blocks. Converts a block delta into a
+// short, judge-friendly age string like "12m", "3h", "2d".
+function humanizeBlockAge(blockDelta: bigint): string {
+  const seconds = Number(blockDelta) * 2
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.round(seconds / 3600)
+  if (hours < 48) return `${hours}h`
+  const days = Math.round(seconds / 86400)
+  return `${days}d`
 }
 
 function explorerTx(tx: string) {
