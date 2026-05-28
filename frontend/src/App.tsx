@@ -76,6 +76,18 @@ const addresses = {
   skill: '0xed06d48a87f8b8b3e78afd7dd59717a3f7317777',
 } as const
 
+// Tokens with a verified Chainlink price feed on X Layer mainnet. The Mode
+// Checker uses this list to recommend Oracle-backed LVR mode for these
+// tokens (rather than defaulting every non-USDT0 token to Proxy mode).
+// Chainlink feeds referenced: OKB/USD 0x4Ff345b18a2bF894F8627F41501FBf30d5C5e7BE,
+// USDT/USD 0xb928a0678352005a2e51F614efD0b54C9830dB80.
+const oracleReadyTokens = [
+  // Native OKB (used as currency0 in the live OKB/USDT0 pool).
+  '0x0000000000000000000000000000000000000000',
+  // X Layer USDT (Chainlink USDT/USD feed available).
+  '0x1E4a5963aBFD975d8c9021ce480b42188849D41d',
+] as const
+
 const flapSkillUrl = `https://flap.sh/xlayer/${addresses.skill}`
 
 // Real SKILL/OKB v4 pool with the HelixFlapProxyHook attached on X Layer
@@ -820,6 +832,7 @@ function App() {
                 modeChecker={{
                   detectToken: detectFlapToken,
                   oracleCoveredToken: addresses.usdt0,
+                  oracleReadyTokens,
                 }}
               />
 

@@ -49,7 +49,15 @@ export type FlapProxyCardProps = {
 
 export type ModeCheckerProps = {
   detectToken: (address: string) => Promise<DetectedToken | null>
+  // Token addresses with a verified Chainlink price feed on X Layer. The
+  // active deployment uses oracleCoveredToken (USDT0); other tokens in
+  // oracleReadyTokens (e.g. OKB, USDT) have feeds available and could be
+  // protected by Oracle-backed LVR mode if a HELIX pool were deployed for
+  // them. Any token not in either list defaults to Launch Protection Proxy
+  // mode in the recommendation, because we cannot honestly claim oracle
+  // coverage we have not verified.
   oracleCoveredToken: string
+  oracleReadyTokens: readonly string[]
 }
 
 function StatusPill({
@@ -236,7 +244,11 @@ function extractAddress(input: string): string | null {
   return match ? match[0] : null
 }
 
-export function ModeCheckerCard({ detectToken, oracleCoveredToken }: ModeCheckerProps) {
+export function ModeCheckerCard({
+  detectToken,
+  oracleCoveredToken,
+  oracleReadyTokens,
+}: ModeCheckerProps) {
   const [input, setInput] = useState('')
   const [status, setStatus] = useState('')
   const [token, setToken] = useState<DetectedToken | null>(null)
@@ -244,17 +256,25 @@ export function ModeCheckerCard({ detectToken, oracleCoveredToken }: ModeChecker
 
   const recommendation = (() => {
     if (!token) return null
-    if (token.address.toLowerCase() === oracleCoveredToken.toLowerCase()) {
+    const addr = token.address.toLowerCase()
+    if (addr === oracleCoveredToken.toLowerCase()) {
       return {
-        label: 'Oracle-backed LVR mode (active)',
+        label: 'Oracle-backed LVR Mode — LIVE proof pool',
         detail:
-          'This token has reliable Chainlink coverage on X Layer — HELIX runs full oracle-anchored LVR for it.',
+          'This is the token in the current OKB/USDT0 HELIX live proof pool on X Layer. Full oracle-anchored LVR adaptation is already running for it; the on-chain events behind every defense card come from this pool.',
+      }
+    }
+    if (oracleReadyTokens.some((t) => t.toLowerCase() === addr)) {
+      return {
+        label: 'Oracle-backed LVR Mode — oracle-ready',
+        detail:
+          'This token has a verified Chainlink price feed on X Layer. A HELIX pool deployed for it could run full Oracle-backed LVR mode (reflex + baseline evolution against the Chainlink reference). It is not in the current live proof pool, but it is oracle-ready.',
       }
     }
     return {
-      label: 'Launch Protection Proxy mode',
+      label: 'Launch Protection Proxy Mode',
       detail:
-        'No verified oracle feed assumed for this token. HELIX would protect a pool here with the HelixFlapProxyHook: launch-shield fee decaying to baseline, plus a size-reflex bump on outsized swaps. No external oracle is consulted.',
+        'No verified Chainlink feed for this token on X Layer. HELIX would protect a pool here with the HelixFlapProxyHook: launch-shield fee decaying to the baseline over its decay window, plus a one-swap size-reflex bump on outsized swaps. No external oracle is consulted in this mode.',
     }
   })()
 
@@ -263,7 +283,7 @@ export function ModeCheckerCard({ detectToken, oracleCoveredToken }: ModeChecker
     setStatus('')
     const address = extractAddress(input.trim())
     if (!address) {
-      setStatus('Paste a 0x… token address or a Flap URL containing one.')
+      setStatus('Paste an X Layer ERC-20 token address (0x…).')
       return
     }
     setLoading(true)
@@ -292,14 +312,16 @@ export function ModeCheckerCard({ detectToken, oracleCoveredToken }: ModeChecker
         </div>
       </div>
       <p className="panel-copy">
-        Paste any X Layer token address. HELIX checks token metadata, oracle-readiness, and whether
-        a HELIX pool exists, and recommends Oracle-backed LVR or Launch Protection Proxy mode.
+        Paste any X Layer ERC-20 token address. HELIX reads its metadata live from chain, checks
+        whether it has a verified Chainlink feed on X Layer, and recommends Oracle-backed LVR or
+        Launch Protection Proxy mode. (For Flap-launched tokens specifically, use the dedicated
+        Flap Launch Protection panel below — it does the same check plus Flap-portal metadata.)
       </p>
       <div className="flap-detect">
         <input
           id="xlayer-checker-input"
           className="flap-input"
-          placeholder="Token address or Flap URL"
+          placeholder="X Layer token address (0x…)"
           value={input}
           onChange={(e) => setInput(e.target.value)}
         />
